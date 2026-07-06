@@ -1,0 +1,48 @@
+{
+  "$schema": "https://aap.opena2a.org/schemas/fixture-v1.json",
+  "name": "aap-v1/cgt-compact-bad-signature",
+  "description": "The §4.2 CGT claim set with a header declaring kid broker-key-1, but the signature was produced by broker-key-2. The claims are schema-valid and unexpired; the signature is the sole defect. Verifier MUST REJECT with BAD_SIGNATURE.",
+  "fixtureType": "cgt",
+  "tokenForm": "compact",
+  "spec": [
+    {
+      "id": "AAP",
+      "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+      "section": "§9.1 Canonical Form"
+    },
+    {
+      "id": "AAP",
+      "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+      "section": "§9.3 Compact Serialization"
+    },
+    {
+      "id": "RFC 8032",
+      "ref": "https://datatracker.ietf.org/doc/html/rfc8032",
+      "section": "Ed25519 (published test-key seeds in vectors/test-keys.json)"
+    }
+  ],
+  "verifierState": {
+    "clockNumericDate": 1780315230,
+    "keys": [
+      {
+        "kid": "broker-key-1",
+        "publicJwk": {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "ebVWLo_mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ",
+          "kid": "broker-key-1",
+          "use": "sig",
+          "alg": "EdDSA"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "verifyResult": "REJECT",
+    "rejectCategory": "BAD_SIGNATURE",
+    "reasonContains": "signature"
+  },
+  "schemaValid": true,
+  "headerSchemaValid": true,
+  "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImJyb2tlci1rZXktMSJ9.eyJpc3MiOiJodHRwczovL2Jyb2tlci5hY21lLmV4YW1wbGUiLCJzdWIiOiJkaWQ6b3BlbmEyYTphZ2VudDphY21lL29yZGVycy1yZWFkZXIiLCJhdWQiOiJodHRwczovL2FwaS5vcmRlcnMuaW50ZXJuYWwiLCJzY29wZSI6Im9yZGVycy5yZWFkIiwidHJ1c3RfY2xhc3MiOiJvcmRlcnM6cmVhZCIsImlzc3Vlcl9jaGFpbiI6WyJkaWQ6b3BlbmEyYTphdXRob3JpdHk6b3BlbmEyYS5vcmciXSwidHJ1c3RfbGV2ZWwiOjQsImlhdCI6MTc4MDMxNTIwMCwiZXhwIjoxNzgwMzE1NTAwLCJqdGkiOiI5ZjhlN2Q2YzViNGEzOTI4MTcwNmY1ZTRkM2MyYjFhMCJ9.dK0Touj44jv9fRNma2cGJ73qgYLeqWSemFMiniB-ePjgmOcdK3iRvtH3-t9E1A1i8NSSp8K77j4CVX5HSnB9Dw"
+}

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://specs.opena2a.org/schemas/aap/jose-header-v1.schema.json",
+  "title": "AAP compact token protected header (AAP-SPEC section 9.2)",
+  "description": "The JOSE protected header of every AAP compact token. A v1 header contains exactly alg, typ, kid and no others; a verifier MUST reject unknown header parameters, including crit (AAP-SPEC section 9.2). General-form per-signature protected headers are a different, smaller shape (exactly alg + kid, AAP-SPEC section 9.4) and do not validate against this schema. `alg` names the signature suite from the AAP suite registry (AAP-SPEC section 9.5); v1 registers exactly one suite, EdDSA (Ed25519). A verifier MUST reject a header whose alg it does not support rather than silently downgrade (AAP-SPEC section 8.2). `typ` is pinned to \"JWT\" in v1; explicit per-token typing is a v2 negotiation item. `kid` identifies the signing key in the issuer's published key material.",
+  "type": "object",
+  "required": ["alg", "typ", "kid"],
+  "additionalProperties": false,
+  "properties": {
+    "alg": {
+      "type": "string",
+      "enum": ["EdDSA"]
+    },
+    "typ": {
+      "type": "string",
+      "const": "JWT"
+    },
+    "kid": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

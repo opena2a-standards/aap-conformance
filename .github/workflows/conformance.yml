@@ -1,0 +1,133 @@
+name: Conformance
+
+# Every README PASS claim in this repository is enforced here:
+# both reference verifiers run against the byte-pinned fixture set,
+# the fixture generator must reproduce the committed bytes exactly,
+# the reused ACCEPT token bytes and vendored schemas must match the pinned
+# agent-authorization-protocol ref, the cross-implementation parity gate
+# must report agreement, and the machine-readable conformance profile must
+# match the fixtures.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  # agent-authorization-protocol ref the vendored schemas and reused ACCEPT
+  # token bytes are pinned to (AAP-SPEC 0.3.0-draft, PR #5 merge).
+  AAP_SPEC_REF: b03def2389d311b67d693595e1295122d9853b8d
+
+jobs:
+  conformance:
+    name: verifiers + parity + byte-pin
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python verifier dependency
+        run: python3 -m pip install "cryptography>=42.0.0"
+
+      - name: Node verifier over fixtures
+        working-directory: verifiers/node
+        run: node verify.mjs ../../fixtures
+
+      - name: Python verifier over fixtures
+        working-directory: verifiers/python
+        run: python3 verify.py ../../fixtures
+
+      - name: Schema validation (fixtures vs vendored spec schemas)
+        run: |
+          python3 -m pip install "jsonschema>=4.21"
+          python3 scripts/schema_validation.py
+
+      - name: Spec drift gate (pinned agent-authorization-protocol ref)
+        uses: actions/checkout@v4
+        with:
+          repository: opena2a-standards/agent-authorization-protocol
+          ref: ${{ env.AAP_SPEC_REF }}
+          path: .spec-src
+
+      - name: Spec drift gate (vendored schemas byte-compare)
+        run: |
+          for f in jose-header-v1 ait-claims-v1 cgt-claims-v1 da-claims-v1 bac-claims-v1 jws-general-v1; do
+            diff ".spec-src/schemas/$f.schema.json" \
+                 "schemas/vendor/agent-authorization-protocol/$f.schema.json"
+          done
+
+      - name: Spec drift gate (reused ACCEPT token bytes + test keys)
+        run: |
+          python3 scripts/spec_pin_check.py .spec-src
+          rm -rf .spec-src
+
+      - name: Fixture byte-pin (generator determinism)
+        run: |
+          node scripts/generate-fixtures.mjs
+          git diff --exit-code -- fixtures MANIFEST.sha256
+
+      - name: MANIFEST.sha256 integrity
+        run: |
+          rc=0
+          while read -r sha file; do
+            [ -z "$sha" ] && continue
+            got=$(sha256sum "$file" | awk '{print $1}')
+            if [ "$got" != "$sha" ]; then
+              echo "MANIFEST mismatch: $file"; rc=1
+            fi
+          done < MANIFEST.sha256
+          exit $rc
+
+      - name: Cross-implementation parity gate
+        run: python3 scripts/parity/parity.py --json parity-report.json
+
+      - name: Conformance profile is current
+        run: python3 scripts/conformance_profile.py --check
+
+      - name: Upload parity report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parity-report
+          path: parity-report.json
+          if-no-files-found: ignore
+
+  sign-manifest:
+    name: cosign MANIFEST (keyless, main only)
+    runs-on: ubuntu-latest
+    needs: conformance
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: sigstore/cosign-installer@v3
+
+      - name: Keyless sign MANIFEST.sha256 (Rekor is the durable record)
+        run: cosign sign-blob --yes --bundle MANIFEST.sha256.cosign.bundle MANIFEST.sha256
+
+      - name: Self-verify the signature just produced
+        run: |
+          cosign verify-blob \
+            --bundle MANIFEST.sha256.cosign.bundle \
+            --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/conformance.yml@refs/heads/main" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            MANIFEST.sha256
+
+      - name: Upload signature bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: manifest-cosign-bundle
+          path: MANIFEST.sha256.cosign.bundle

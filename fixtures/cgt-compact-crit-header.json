@@ -1,0 +1,43 @@
+{
+  "$schema": "https://aap.opena2a.org/schemas/fixture-v1.json",
+  "name": "aap-v1/cgt-compact-crit-header",
+  "description": "A CGT whose protected header carries crit: [\"aap_ver\"]. v1 headers are CLOSED (§9.2): a verifier MUST reject unknown header parameters, including crit — RFC 7515 §4.1.11 crit processing is exactly the extension channel a closed v1 header refuses. The signature is a valid Ed25519 signature over these exact header bytes. Verifier MUST REJECT with UNKNOWN_HEADER_PARAM.",
+  "fixtureType": "cgt",
+  "tokenForm": "compact",
+  "spec": [
+    {
+      "id": "AAP",
+      "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+      "section": "§9.2 Protected Header (closed v1 header)"
+    },
+    {
+      "id": "RFC 7515",
+      "ref": "https://datatracker.ietf.org/doc/html/rfc7515",
+      "section": "JSON Web Signature"
+    }
+  ],
+  "verifierState": {
+    "clockNumericDate": 1780315230,
+    "keys": [
+      {
+        "kid": "broker-key-1",
+        "publicJwk": {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "ebVWLo_mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ",
+          "kid": "broker-key-1",
+          "use": "sig",
+          "alg": "EdDSA"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "verifyResult": "REJECT",
+    "rejectCategory": "UNKNOWN_HEADER_PARAM",
+    "reasonContains": "crit"
+  },
+  "schemaValid": true,
+  "headerSchemaValid": false,
+  "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImJyb2tlci1rZXktMSIsImNyaXQiOlsiYWFwX3ZlciJdfQ.eyJpc3MiOiJodHRwczovL2Jyb2tlci5hY21lLmV4YW1wbGUiLCJzdWIiOiJkaWQ6b3BlbmEyYTphZ2VudDphY21lL29yZGVycy1yZWFkZXIiLCJhdWQiOiJodHRwczovL2FwaS5vcmRlcnMuaW50ZXJuYWwiLCJzY29wZSI6Im9yZGVycy5yZWFkIiwidHJ1c3RfY2xhc3MiOiJvcmRlcnM6cmVhZCIsImlzc3Vlcl9jaGFpbiI6WyJkaWQ6b3BlbmEyYTphdXRob3JpdHk6b3BlbmEyYS5vcmciXSwidHJ1c3RfbGV2ZWwiOjQsImlhdCI6MTc4MDMxNTIwMCwiZXhwIjoxNzgwMzE1NTAwLCJqdGkiOiIxYTJiM2M0ZDVlNmY3MDgxOTJhM2I0YzVkNmU3ZjgwOSJ9._cSn_tvmBiB6qCjuggHs-V6rYR2TXchQrtE2IvnQozmz1Ltn6stQpfK3WVKO6xTNCxxn4da8A1CIvKYrPNCCDw"
+}

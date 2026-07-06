@@ -1,0 +1,65 @@
+{
+  "$schema": "https://aap.opena2a.org/schemas/fixture-v1.json",
+  "name": "aap-v1/cgt-general-one-bad-signature",
+  "description": "The multi-signature CGT with the first entry (broker-key-1) verifying and the second entry declaring kid broker-key-2 but carrying a signature produced by broker-key-1. §9.4: every declared entry MUST verify; a verifier MUST NOT accept a token on a subset of its declared signatures — accepting one-of-two silently drops the post-quantum half of a hybrid credential. Verifier MUST REJECT with BAD_SIGNATURE.",
+  "fixtureType": "cgt",
+  "tokenForm": "general",
+  "spec": [
+    {
+      "id": "AAP",
+      "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+      "section": "§9.4 Multi-Signature Form (every declared entry MUST verify)"
+    },
+    {
+      "id": "AAP",
+      "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+      "section": "§8.2 Cryptographic Agility"
+    }
+  ],
+  "verifierState": {
+    "clockNumericDate": 1780315230,
+    "keys": [
+      {
+        "kid": "broker-key-1",
+        "publicJwk": {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "ebVWLo_mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ",
+          "kid": "broker-key-1",
+          "use": "sig",
+          "alg": "EdDSA"
+        }
+      },
+      {
+        "kid": "broker-key-2",
+        "publicJwk": {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "Kay64UG8yvCyLhqU000LxzYeUm0L_hLIl5S8kyKWbdc",
+          "kid": "broker-key-2",
+          "use": "sig",
+          "alg": "EdDSA"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "verifyResult": "REJECT",
+    "rejectCategory": "BAD_SIGNATURE",
+    "reasonContains": "signature"
+  },
+  "schemaValid": true,
+  "tokenGeneral": {
+    "payload": "eyJpc3MiOiJodHRwczovL2Jyb2tlci5hY21lLmV4YW1wbGUiLCJzdWIiOiJkaWQ6b3BlbmEyYTphZ2VudDphY21lL29yZGVycy1yZWFkZXIiLCJhdWQiOiJodHRwczovL2FwaS5vcmRlcnMuaW50ZXJuYWwiLCJzY29wZSI6Im9yZGVycy5yZWFkIiwidHJ1c3RfY2xhc3MiOiJvcmRlcnM6cmVhZCIsImlzc3Vlcl9jaGFpbiI6WyJkaWQ6b3BlbmEyYTphdXRob3JpdHk6b3BlbmEyYS5vcmciXSwidHJ1c3RfbGV2ZWwiOjQsImlhdCI6MTc4MDMxNTIwMCwiZXhwIjoxNzgwMzE1NTAwLCJqdGkiOiI5ZjhlN2Q2YzViNGEzOTI4MTcwNmY1ZTRkM2MyYjFhMCJ9",
+    "signatures": [
+      {
+        "protected": "eyJhbGciOiJFZERTQSIsImtpZCI6ImJyb2tlci1rZXktMSJ9",
+        "signature": "7-kf_vmchx-P6zg-CsSIQvYdPHQaObrQSIngnI7HpL1D5l544iGTg8jIOxpNf0g0KoBRNVr2vJ5Gj3fjRwtoAg"
+      },
+      {
+        "protected": "eyJhbGciOiJFZERTQSIsImtpZCI6ImJyb2tlci1rZXktMiJ9",
+        "signature": "tDWqkbGIAo3G4pbpcLCQkvERoqqA4qKH2p8RYuvJkU0xMs57Q9-jw2wHgZVqzIxVAwv2SiAO9w_eBS_ovCQyCg"
+      }
+    ]
+  }
+}

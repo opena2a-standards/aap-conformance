@@ -1,0 +1,43 @@
+{
+  "$schema": "https://aap.opena2a.org/schemas/fixture-v1.json",
+  "name": "aap-v1/bac-compact-ttl-exceeded",
+  "description": "A BAC with exp - iat = 300. The BAC validity window is normatively capped at 60 seconds (§6.1); a longer window turns a point-in-time behavioral attestation into a bearer credential. The claim set is schema-valid (the cap is a prose rule, not a schema rule) and the token is unexpired at the pinned clock; the window is the sole defect. Verifier MUST REJECT with TTL_WINDOW.",
+  "fixtureType": "bac",
+  "tokenForm": "compact",
+  "spec": [
+    {
+      "id": "AAP",
+      "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+      "section": "§6.1 Purpose (60-second TTL)"
+    },
+    {
+      "id": "AAP",
+      "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+      "section": "§6.4 Claim Set"
+    }
+  ],
+  "verifierState": {
+    "clockNumericDate": 1780315230,
+    "keys": [
+      {
+        "kid": "registry-key-1",
+        "publicJwk": {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "TtqNIzIHZVLkAhWGW4qpfZJodw1rrdmNIbWaxHQSUVs",
+          "kid": "registry-key-1",
+          "use": "sig",
+          "alg": "EdDSA"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "verifyResult": "REJECT",
+    "rejectCategory": "TTL_WINDOW",
+    "reasonContains": "60"
+  },
+  "schemaValid": true,
+  "headerSchemaValid": true,
+  "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6InJlZ2lzdHJ5LWtleS0xIn0.eyJpc3MiOiJkaWQ6b3BlbmEyYTphdXRob3JpdHk6b3BlbmEyYS5vcmciLCJzdWIiOiJkaWQ6b3BlbmEyYTphZ2VudDphY21lL29yZGVycy1yZWFkZXIiLCJiYWNfbGV2ZWwiOjMsImF0eF9yZWZlcmVuY2UiOiJzaGEyNTY6MjA1Mjg3OWRkYTE1YjFjYTVlNjAzMTllMzQ3N2E0MDA4NDEyYmZmZGFmM2MzNTY2YzY1ODc5NWE0OGNhYjhmZCIsImJpbmFyeV9oYXNoIjoic2hhMjU2OjQ3OWJkMjhhNTVlM2EzZWIyMGI5ZjViNDgyMDIzMThkNWRlOWQwZGJlYTllNmRmMjBiMmVlN2ZmOTVhNGMxMzUiLCJkcmlmdF9zY29yZSI6MC4wNCwiYW5vbWFseV9zdGF0ZSI6Im5vbWluYWwiLCJpbnRlbnRfdmVyaWZpZWQiOnRydWUsImlhdCI6MTc4MDMxNTIwMCwiZXhwIjoxNzgwMzE1NTAwLCJqdGkiOiI2ZjcwODE5MmEzYjRjNWQ2ZTdmODA5MWEyYjNjNGQ1ZSJ9.9OgZwsm3nTikARceO9t2xvIMR-n24vn2tA8F6rkyHN9l1z4ZEAOBihPaPEQF4bBRLi2LAbXSIphU8QGzz4vGCw"
+}

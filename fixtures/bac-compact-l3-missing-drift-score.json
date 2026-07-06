@@ -1,0 +1,43 @@
+{
+  "$schema": "https://aap.opena2a.org/schemas/fixture-v1.json",
+  "name": "aap-v1/bac-compact-l3-missing-drift-score",
+  "description": "A BAC declaring bac_level 3 without drift_score. Levels are cumulative (§6.2/§6.4): L3 requires binary_hash, drift_score, anomaly_state, and intent_verified; the other three are present, drift_score is the sole omission. Verifier MUST REJECT with CLAIM_SCHEMA.",
+  "fixtureType": "bac",
+  "tokenForm": "compact",
+  "spec": [
+    {
+      "id": "AAP",
+      "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+      "section": "§6.4 Claim Set (cumulative levels)"
+    },
+    {
+      "id": "AAP",
+      "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+      "section": "§6.2 Three Levels"
+    }
+  ],
+  "verifierState": {
+    "clockNumericDate": 1780315230,
+    "keys": [
+      {
+        "kid": "registry-key-1",
+        "publicJwk": {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "TtqNIzIHZVLkAhWGW4qpfZJodw1rrdmNIbWaxHQSUVs",
+          "kid": "registry-key-1",
+          "use": "sig",
+          "alg": "EdDSA"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "verifyResult": "REJECT",
+    "rejectCategory": "CLAIM_SCHEMA",
+    "reasonContains": "drift_score"
+  },
+  "schemaValid": false,
+  "headerSchemaValid": true,
+  "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6InJlZ2lzdHJ5LWtleS0xIn0.eyJpc3MiOiJkaWQ6b3BlbmEyYTphdXRob3JpdHk6b3BlbmEyYS5vcmciLCJzdWIiOiJkaWQ6b3BlbmEyYTphZ2VudDphY21lL29yZGVycy1yZWFkZXIiLCJiYWNfbGV2ZWwiOjMsImF0eF9yZWZlcmVuY2UiOiJzaGEyNTY6MjA1Mjg3OWRkYTE1YjFjYTVlNjAzMTllMzQ3N2E0MDA4NDEyYmZmZGFmM2MzNTY2YzY1ODc5NWE0OGNhYjhmZCIsImJpbmFyeV9oYXNoIjoic2hhMjU2OjQ3OWJkMjhhNTVlM2EzZWIyMGI5ZjViNDgyMDIzMThkNWRlOWQwZGJlYTllNmRmMjBiMmVlN2ZmOTVhNGMxMzUiLCJhbm9tYWx5X3N0YXRlIjoibm9taW5hbCIsImludGVudF92ZXJpZmllZCI6dHJ1ZSwiaWF0IjoxNzgwMzE1MjAwLCJleHAiOjE3ODAzMTUyNjAsImp0aSI6IjcwODE5MmEzYjRjNWQ2ZTdmODA5MWEyYjNjNGQ1ZTZmIn0.wty2M8SImyoHVL6YAEBKKHIS_6qsx7wRWng0yWJh0qWEnCZBLQWU5eBUeUgsWbPouFeFpTRGdQPFJFZzG2hjDA"
+}

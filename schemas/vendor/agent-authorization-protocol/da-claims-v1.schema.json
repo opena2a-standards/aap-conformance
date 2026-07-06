@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://specs.opena2a.org/schemas/aap/da-claims-v1.schema.json",
+  "title": "AAP Delegation Assertion claim set (AAP-SPEC section 5.3)",
+  "description": "Claims of the DA: the CGT claim set plus the RFC 8693 delegation members. `sub` is the delegatee, `act.sub` the delegating agent (nesting `act` expresses a chain, innermost first, per RFC 8693 section 4.1), `max_depth` bounds further delegation, `delegator_atx` embeds the delegator's ATX hash for the audit trail (AAP-SPEC section 5.2). The delegatee scope MUST be a subset of the delegator's scope; subsetting is enforced by the minting broker and re-checked by verifiers — the schema pins presence and form, not the subset relation. Self-contained: duplicates the CGT members rather than $ref-ing them so verification never requires reference resolution.",
+  "type": "object",
+  "required": ["iss", "sub", "aud", "scope", "trust_class", "issuer_chain", "trust_level", "act", "max_depth", "delegator_atx", "iat", "exp", "jti"],
+  "properties": {
+    "iss": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sub": {
+      "type": "string",
+      "pattern": "^did:"
+    },
+    "aud": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1
+    },
+    "trust_class": {
+      "type": "string",
+      "pattern": "^[a-z0-9_-]+:[a-z0-9_-]+$"
+    },
+    "issuer_chain": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^did:"
+      }
+    },
+    "trust_level": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4
+    },
+    "act": {
+      "$ref": "#/$defs/actor"
+    },
+    "max_depth": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "delegator_atx": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "iat": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "exp": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "jti": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "aap_ver": {
+      "type": "integer",
+      "minimum": 1
+    }
+  },
+  "$defs": {
+    "actor": {
+      "type": "object",
+      "required": ["sub"],
+      "properties": {
+        "sub": {
+          "type": "string",
+          "pattern": "^did:"
+        },
+        "act": {
+          "$ref": "#/$defs/actor"
+        }
+      }
+    }
+  }
+}

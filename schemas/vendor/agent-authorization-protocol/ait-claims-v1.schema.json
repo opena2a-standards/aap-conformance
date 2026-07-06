@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://specs.opena2a.org/schemas/aap/ait-claims-v1.schema.json",
+  "title": "AAP Agent Identity Token claim set (AAP-SPEC section 3.2)",
+  "description": "Claims of the AIT, an OIDC-ID-Token-analog JWT asserting agent identity. Issued by a Registry (Root Authority); `iss` is the issuing authority DID, `sub` the agent DID, `atx_reference` the sha256 of the current ATX the token references. Unknown members are optional-to-ignore (AAP broker profile section 8.3). No reference implementation mints AITs yet; this schema and the generated example pin the form for implementers.",
+  "type": "object",
+  "required": ["iss", "sub", "atx_reference", "trust_level", "iat", "exp", "jti"],
+  "properties": {
+    "iss": {
+      "type": "string",
+      "pattern": "^did:"
+    },
+    "sub": {
+      "type": "string",
+      "pattern": "^did:"
+    },
+    "agent_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "atx_reference": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "declared_purpose": {
+      "type": "string",
+      "minLength": 1
+    },
+    "trust_level": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4
+    },
+    "iat": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "exp": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "jti": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "aap_ver": {
+      "type": "integer",
+      "minimum": 1
+    }
+  }
+}

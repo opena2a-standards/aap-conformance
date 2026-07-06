@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://specs.opena2a.org/schemas/aap/cgt-claims-v1.schema.json",
+  "title": "AAP Capability Grant Token claim set (AAP-SPEC section 4.2)",
+  "description": "Claims of the CGT, ratified byte-for-byte from the reference broker assertion (Secretless src/broker/cpi/assertion.ts). `iss` is the minting broker's issuer identifier, `sub` the agent DID from the verified ATX, `aud`/`scope` the downstream audience and OAuth scope, `trust_class` the ATX capability (abstract trust class) exercised for this grant, `issuer_chain`/`trust_level` the federation attributes carried for v2 cross-broker verification. The optional FGA members (`fga_constraints`, `intent_verified`, `max_uses`, `context_required`) are optional-to-ignore (AAP broker profile section 8.3) and are not minted by the v1 reference.",
+  "type": "object",
+  "required": ["iss", "sub", "aud", "scope", "trust_class", "issuer_chain", "trust_level", "iat", "exp", "jti"],
+  "properties": {
+    "iss": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sub": {
+      "type": "string",
+      "pattern": "^did:"
+    },
+    "aud": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1
+    },
+    "trust_class": {
+      "type": "string",
+      "pattern": "^[a-z0-9_-]+:[a-z0-9_-]+$"
+    },
+    "issuer_chain": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^did:"
+      }
+    },
+    "trust_level": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4
+    },
+    "iat": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "exp": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "jti": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "aap_ver": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "fga_constraints": {
+      "type": "string",
+      "description": "JSON-encoded FGA policy (AAP-SPEC section 4.2). Optional-to-ignore."
+    },
+    "intent_verified": {
+      "type": "boolean"
+    },
+    "max_uses": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "context_required": {
+      "type": "boolean"
+    }
+  }
+}

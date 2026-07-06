@@ -1,0 +1,51 @@
+{
+  "$schema": "https://aap.opena2a.org/schemas/fixture-v1.json",
+  "name": "aap-v1/ait-compact-valid",
+  "description": "The spec repo's generated AIT (examples/tokens/ait-v1.jwt): a compact EdDSA JWT with the §3.2 claim set, signed by registry-key-1. Verifier MUST ACCEPT.",
+  "fixtureType": "ait",
+  "tokenForm": "compact",
+  "spec": [
+    {
+      "id": "AAP",
+      "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+      "section": "§3.2 Token Structure"
+    },
+    {
+      "id": "AAP",
+      "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+      "section": "§9.3 Compact Serialization"
+    },
+    {
+      "id": "RFC 7515",
+      "ref": "https://datatracker.ietf.org/doc/html/rfc7515",
+      "section": "JSON Web Signature"
+    },
+    {
+      "id": "RFC 8032",
+      "ref": "https://datatracker.ietf.org/doc/html/rfc8032",
+      "section": "Ed25519 (published test-key seeds in vectors/test-keys.json)"
+    }
+  ],
+  "verifierState": {
+    "clockNumericDate": 1780315230,
+    "keys": [
+      {
+        "kid": "registry-key-1",
+        "publicJwk": {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "TtqNIzIHZVLkAhWGW4qpfZJodw1rrdmNIbWaxHQSUVs",
+          "kid": "registry-key-1",
+          "use": "sig",
+          "alg": "EdDSA"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "verifyResult": "ACCEPT"
+  },
+  "schemaValid": true,
+  "headerSchemaValid": true,
+  "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6InJlZ2lzdHJ5LWtleS0xIn0.eyJpc3MiOiJkaWQ6b3BlbmEyYTphdXRob3JpdHk6b3BlbmEyYS5vcmciLCJzdWIiOiJkaWQ6b3BlbmEyYTphZ2VudDphY21lL29yZGVycy1yZWFkZXIiLCJhZ2VudF9pZCI6ImFpbV9vcmRlcnNfcmVhZGVyIiwiYXR4X3JlZmVyZW5jZSI6InNoYTI1NjoyMDUyODc5ZGRhMTViMWNhNWU2MDMxOWUzNDc3YTQwMDg0MTJiZmZkYWYzYzM1NjZjNjU4Nzk1YTQ4Y2FiOGZkIiwiZGVjbGFyZWRfcHVycG9zZSI6IlJlYWRzIG9yZGVyIHJlY29yZHMgZm9yIHJlcG9ydGluZyIsInRydXN0X2xldmVsIjo0LCJpYXQiOjE3ODAzMTUyMDAsImV4cCI6MTc4MDMxODgwMCwianRpIjoiMWM5ZjJlOGE3YjZkNWM0ZTNmMmExYjBjOWQ4ZTdmNmEifQ.RwM5kDqjuCZpmPtTNipseEGcHB06uqZZ8T8Shm2v3FROK9ECULU1qjP466AMwEPjAKL-xFIasjTo_en20Hc_Bw"
+}

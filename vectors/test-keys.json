@@ -1,0 +1,41 @@
+{
+  "warning": "TEST KEYS with published seeds \u2014 fixture reproduction only, never production use",
+  "keys": [
+    {
+      "kid": "registry-key-1",
+      "ed25519SeedHex": "8f7a1c2e4b6d8091a3c5e7f90b2d4f6a8c0e1f3a5b7d9e0c2a4b6d8f0a1c3e5f",
+      "publicJwk": {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "TtqNIzIHZVLkAhWGW4qpfZJodw1rrdmNIbWaxHQSUVs",
+        "kid": "registry-key-1",
+        "use": "sig",
+        "alg": "EdDSA"
+      }
+    },
+    {
+      "kid": "broker-key-1",
+      "ed25519SeedHex": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+      "publicJwk": {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "ebVWLo_mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ",
+        "kid": "broker-key-1",
+        "use": "sig",
+        "alg": "EdDSA"
+      }
+    },
+    {
+      "kid": "broker-key-2",
+      "ed25519SeedHex": "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+      "publicJwk": {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "Kay64UG8yvCyLhqU000LxzYeUm0L_hLIl5S8kyKWbdc",
+        "kid": "broker-key-2",
+        "use": "sig",
+        "alg": "EdDSA"
+      }
+    }
+  ]
+}

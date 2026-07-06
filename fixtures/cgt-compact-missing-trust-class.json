@@ -1,0 +1,38 @@
+{
+  "$schema": "https://aap.opena2a.org/schemas/fixture-v1.json",
+  "name": "aap-v1/cgt-compact-missing-trust-class",
+  "description": "A CGT missing the REQUIRED trust_class claim (§4.2). Everything else is valid, including the signature. Verifier MUST REJECT with CLAIM_SCHEMA.",
+  "fixtureType": "cgt",
+  "tokenForm": "compact",
+  "spec": [
+    {
+      "id": "AAP",
+      "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+      "section": "§4.2 Token Structure"
+    }
+  ],
+  "verifierState": {
+    "clockNumericDate": 1780315230,
+    "keys": [
+      {
+        "kid": "broker-key-1",
+        "publicJwk": {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "ebVWLo_mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ",
+          "kid": "broker-key-1",
+          "use": "sig",
+          "alg": "EdDSA"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "verifyResult": "REJECT",
+    "rejectCategory": "CLAIM_SCHEMA",
+    "reasonContains": "trust_class"
+  },
+  "schemaValid": false,
+  "headerSchemaValid": true,
+  "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImJyb2tlci1rZXktMSJ9.eyJpc3MiOiJodHRwczovL2Jyb2tlci5hY21lLmV4YW1wbGUiLCJzdWIiOiJkaWQ6b3BlbmEyYTphZ2VudDphY21lL29yZGVycy1yZWFkZXIiLCJhdWQiOiJodHRwczovL2FwaS5vcmRlcnMuaW50ZXJuYWwiLCJzY29wZSI6Im9yZGVycy5yZWFkIiwiaXNzdWVyX2NoYWluIjpbImRpZDpvcGVuYTJhOmF1dGhvcml0eTpvcGVuYTJhLm9yZyJdLCJ0cnVzdF9sZXZlbCI6NCwiaWF0IjoxNzgwMzE1MjAwLCJleHAiOjE3ODAzMTU1MDAsImp0aSI6IjNjNGQ1ZTZmNzA4MTkyYTNiNGM1ZDZlN2Y4MDkxYTJiIn0.lNxHTcYSA9pVCnubJ3FQcwI7AF1CQA4pqoWvDPDy_PfH67kbuWFY9ebrGyBYzVaWI4em6Y7VAzdYUmKj8wQbAQ"
+}

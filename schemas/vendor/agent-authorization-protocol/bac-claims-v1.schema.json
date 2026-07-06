@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://specs.opena2a.org/schemas/aap/bac-claims-v1.schema.json",
+  "title": "AAP Behavioral Attestation Claim set (AAP-SPEC section 6.4)",
+  "description": "Claims of the BAC, a short-lived (60-second TTL) attestation of current behavioral state, issued by a Registry instance. Levels are cumulative: L1 requires `atx_reference` (build-time attestation), L2 additionally `binary_hash` (runtime self-attestation), L3 additionally `drift_score`, `anomaly_state`, and `intent_verified` (behavioral continuity). The `anomaly_state` vocabulary is implementation-defined in v1. The 60-second TTL (exp - iat <= 60) is normative prose (AAP-SPEC section 6.1); the schema pins member presence and form. No reference implementation mints BACs yet.",
+  "type": "object",
+  "required": ["iss", "sub", "bac_level", "atx_reference", "iat", "exp", "jti"],
+  "properties": {
+    "iss": {
+      "type": "string",
+      "pattern": "^did:"
+    },
+    "sub": {
+      "type": "string",
+      "pattern": "^did:"
+    },
+    "bac_level": {
+      "type": "integer",
+      "enum": [1, 2, 3]
+    },
+    "atx_reference": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "binary_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "drift_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "anomaly_state": {
+      "type": "string",
+      "minLength": 1
+    },
+    "intent_verified": {
+      "type": "boolean"
+    },
+    "iat": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "exp": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "jti": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "aap_ver": {
+      "type": "integer",
+      "minimum": 1
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "bac_level": { "const": 2 } }
+      },
+      "then": {
+        "required": ["binary_hash"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "bac_level": { "const": 3 } }
+      },
+      "then": {
+        "required": ["binary_hash", "drift_score", "anomaly_state", "intent_verified"]
+      }
+    }
+  ]
+}

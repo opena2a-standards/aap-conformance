@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://specs.opena2a.org/schemas/aap/jws-general-v1.schema.json",
+  "title": "AAP multi-signature token container (AAP-SPEC section 9.4)",
+  "description": "JWS General JSON Serialization (RFC 7515 section 7.2.1) — the vehicle for AAP's per-signature suite model (AAP-SPEC section 8.2). Each signatures[] entry carries its own protected header (alg + kid) over the same payload; this is isomorphic to the ATX/ATP {keyId, algorithm, value} model. A hybrid credential carries one Ed25519 entry and one ML-DSA-65 entry, and every declared entry MUST verify. `payload` and each `protected`/`signature` are base64url without padding.",
+  "type": "object",
+  "required": ["payload", "signatures"],
+  "properties": {
+    "payload": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "signatures": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["protected", "signature"],
+        "properties": {
+          "protected": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "header": {
+            "type": "object"
+          },
+          "signature": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$"
+          }
+        }
+      }
+    }
+  }
+}

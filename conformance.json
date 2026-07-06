@@ -1,0 +1,441 @@
+{
+  "$schema": "https://specs.opena2a.org/schemas/conformance-profile-v1.json",
+  "suite": "aap-conformance",
+  "spec": {
+    "id": "AAP",
+    "name": "Agent Authorization Protocol",
+    "version": "0.3.0-draft",
+    "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md"
+  },
+  "fixtureManifest": "MANIFEST.sha256",
+  "verifiers": [
+    {
+      "language": "node",
+      "path": "verifiers/node",
+      "coverage": "full fixture set; exercises the same node:crypto JOSE primitives the TypeScript reference broker (Secretless) mints with"
+    },
+    {
+      "language": "python",
+      "path": "verifiers/python",
+      "coverage": "full fixture set; mirrors the spec repo's Python fixture generator from the verification side"
+    }
+  ],
+  "notCovered": [
+    {
+      "specSection": "§9.5 ML-DSA-65 suite",
+      "reason": "reserved pending IETF JOSE registration; no AAP token declares it, so no fixture can carry a real ML-DSA-65 signature yet"
+    },
+    {
+      "specSection": "§7 cross-organizational federation and broker-profile runtime behavior (CPI endpoints, grant references, revocation propagation)",
+      "reason": "runtime protocol flows, not token wire form; grant-reference-v1 is validated against the broker-profile ABNF in the spec repo's own CI"
+    },
+    {
+      "specSection": "§8.3 intent verification and the optional CGT FGA members",
+      "reason": "optional-to-ignore per the broker profile; the v1 reference does not mint them — the schemas accept them, but no fixture pins their semantics"
+    }
+  ],
+  "requirements": [
+    {
+      "fixture": "fixtures/ait-compact-valid.json",
+      "name": "aap-v1/ait-compact-valid",
+      "fixtureType": "ait",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§3.2 Token Structure"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§9.3 Compact Serialization"
+        },
+        {
+          "id": "RFC 7515",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc7515",
+          "section": "JSON Web Signature"
+        },
+        {
+          "id": "RFC 8032",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc8032",
+          "section": "Ed25519 (published test-key seeds in vectors/test-keys.json)"
+        }
+      ],
+      "expected": "ACCEPT",
+      "description": "The spec repo's generated AIT (examples/tokens/ait-v1.jwt): a compact EdDSA JWT with the §3.2 claim set, signed by registry-key-1. Verifier MUST ACCEPT."
+    },
+    {
+      "fixture": "fixtures/bac-compact-l3-missing-drift-score.json",
+      "name": "aap-v1/bac-compact-l3-missing-drift-score",
+      "fixtureType": "bac",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§6.4 Claim Set (cumulative levels)"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§6.2 Three Levels"
+        }
+      ],
+      "expected": "REJECT[CLAIM_SCHEMA]",
+      "description": "A BAC declaring bac_level 3 without drift_score. Levels are cumulative (§6.2/§6.4): L3 requires binary_hash, drift_score, anomaly_state, and intent_verified; the other three are present, drift_score is the sole omission. Verifier MUST REJECT with CLAIM_SCHEMA."
+    },
+    {
+      "fixture": "fixtures/bac-compact-ttl-exceeded.json",
+      "name": "aap-v1/bac-compact-ttl-exceeded",
+      "fixtureType": "bac",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§6.1 Purpose (60-second TTL)"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§6.4 Claim Set"
+        }
+      ],
+      "expected": "REJECT[TTL_WINDOW]",
+      "description": "A BAC with exp - iat = 300. The BAC validity window is normatively capped at 60 seconds (§6.1); a longer window turns a point-in-time behavioral attestation into a bearer credential. The claim set is schema-valid (the cap is a prose rule, not a schema rule) and the token is unexpired at the pinned clock; the window is the sole defect. Verifier MUST REJECT with TTL_WINDOW."
+    },
+    {
+      "fixture": "fixtures/bac-compact-valid.json",
+      "name": "aap-v1/bac-compact-valid",
+      "fixtureType": "bac",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§6.4 Claim Set"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§6.1 Purpose (60-second TTL)"
+        },
+        {
+          "id": "RFC 7515",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc7515",
+          "section": "JSON Web Signature"
+        },
+        {
+          "id": "RFC 8032",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc8032",
+          "section": "Ed25519 (published test-key seeds in vectors/test-keys.json)"
+        }
+      ],
+      "expected": "ACCEPT",
+      "description": "The spec repo's generated BAC (examples/tokens/bac-v1.jwt): a Level 3 behavioral attestation with the cumulative L1-L3 members and a 60-second validity window (exp - iat = 60), signed by registry-key-1. Verifier MUST ACCEPT."
+    },
+    {
+      "fixture": "fixtures/cgt-compact-bad-signature.json",
+      "name": "aap-v1/cgt-compact-bad-signature",
+      "fixtureType": "cgt",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§9.1 Canonical Form"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§9.3 Compact Serialization"
+        },
+        {
+          "id": "RFC 8032",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc8032",
+          "section": "Ed25519 (published test-key seeds in vectors/test-keys.json)"
+        }
+      ],
+      "expected": "REJECT[BAD_SIGNATURE]",
+      "description": "The §4.2 CGT claim set with a header declaring kid broker-key-1, but the signature was produced by broker-key-2. The claims are schema-valid and unexpired; the signature is the sole defect. Verifier MUST REJECT with BAD_SIGNATURE."
+    },
+    {
+      "fixture": "fixtures/cgt-compact-crit-header.json",
+      "name": "aap-v1/cgt-compact-crit-header",
+      "fixtureType": "cgt",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§9.2 Protected Header (closed v1 header)"
+        },
+        {
+          "id": "RFC 7515",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc7515",
+          "section": "JSON Web Signature"
+        }
+      ],
+      "expected": "REJECT[UNKNOWN_HEADER_PARAM]",
+      "description": "A CGT whose protected header carries crit: [\"aap_ver\"]. v1 headers are CLOSED (§9.2): a verifier MUST reject unknown header parameters, including crit — RFC 7515 §4.1.11 crit processing is exactly the extension channel a closed v1 header refuses. The signature is a valid Ed25519 signature over these exact header bytes. Verifier MUST REJECT with UNKNOWN_HEADER_PARAM."
+    },
+    {
+      "fixture": "fixtures/cgt-compact-duplicate-header-member.json",
+      "name": "aap-v1/cgt-compact-duplicate-header-member",
+      "fixtureType": "cgt",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§9.2 Protected Header (strict parse)"
+        },
+        {
+          "id": "RFC 8259",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc8259",
+          "section": "§4 (duplicate object names)"
+        }
+      ],
+      "expected": "REJECT[MALFORMED_HEADER]",
+      "description": "A CGT whose protected header bytes contain the alg member twice: {\"alg\":\"EdDSA\",...,\"alg\":\"none\"}. A last-wins JSON parser sees alg none; a first-wins parser sees alg EdDSA and a signature that verifies — the classic duplicate-member smuggling split. A verifier MUST strict-parse the protected header and reject duplicate members (§9.2 closed header; RFC 8259 duplicate names are undefined behavior). Verifier MUST REJECT with MALFORMED_HEADER."
+    },
+    {
+      "fixture": "fixtures/cgt-compact-expired.json",
+      "name": "aap-v1/cgt-compact-expired",
+      "fixtureType": "cgt",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§4.3 TTL Tiers"
+        },
+        {
+          "id": "RFC 7519",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc7519",
+          "section": "§4.1.4 (exp)"
+        }
+      ],
+      "expected": "REJECT[EXPIRED]",
+      "description": "Byte-identical to cgt-compact-valid (the spec repo's cgt-v1.jwt; exp = iat + 300); only the pinned verifier clock differs — one second past exp. The signature IS valid; expiry is the sole defect. Verifier MUST REJECT with EXPIRED."
+    },
+    {
+      "fixture": "fixtures/cgt-compact-jti-uppercase.json",
+      "name": "aap-v1/cgt-compact-jti-uppercase",
+      "fixtureType": "cgt",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§8.1 Replay Prevention (jti form)"
+        }
+      ],
+      "expected": "REJECT[CLAIM_SCHEMA]",
+      "description": "A CGT whose jti is uppercase hex. §8.1 pins jti as 16 random bytes LOWERCASE hex (^[0-9a-f]{32}$); a case-insensitive validator lets two encodings of the same replay id through dedup. The signature is valid. Verifier MUST REJECT with CLAIM_SCHEMA."
+    },
+    {
+      "fixture": "fixtures/cgt-compact-missing-trust-class.json",
+      "name": "aap-v1/cgt-compact-missing-trust-class",
+      "fixtureType": "cgt",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§4.2 Token Structure"
+        }
+      ],
+      "expected": "REJECT[CLAIM_SCHEMA]",
+      "description": "A CGT missing the REQUIRED trust_class claim (§4.2). Everything else is valid, including the signature. Verifier MUST REJECT with CLAIM_SCHEMA."
+    },
+    {
+      "fixture": "fixtures/cgt-compact-trust-class-scope-shaped.json",
+      "name": "aap-v1/cgt-compact-trust-class-scope-shaped",
+      "fixtureType": "cgt",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§4.2 Token Structure (trust_class)"
+        }
+      ],
+      "expected": "REJECT[CLAIM_SCHEMA]",
+      "description": "A CGT whose trust_class carries a scope-shaped value (orders.read) instead of an abstract ATX trust class (orders:read) — it fails the ^[a-z0-9_-]+:[a-z0-9_-]+$ pattern. This is the regression fixture for the reference-broker bug fixed in secretless-ai#92 (trust_class minted from the binding scope instead of the matched policy clause). Verifier MUST REJECT with CLAIM_SCHEMA."
+    },
+    {
+      "fixture": "fixtures/cgt-compact-unknown-alg.json",
+      "name": "aap-v1/cgt-compact-unknown-alg",
+      "fixtureType": "cgt",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§9.5 Suite Registry (v1)"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§8.2 Cryptographic Agility (no silent downgrade)"
+        }
+      ],
+      "expected": "REJECT[UNKNOWN_ALG]",
+      "description": "A CGT whose protected header declares alg ES256 — a suite absent from the §9.5 registry. The verifier MUST reject an alg it does not support rather than silently downgrade or guess (§8.2); rejection happens at the header stage, before any signature evaluation. Verifier MUST REJECT with UNKNOWN_ALG."
+    },
+    {
+      "fixture": "fixtures/cgt-compact-valid.json",
+      "name": "aap-v1/cgt-compact-valid",
+      "fixtureType": "cgt",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§4.2 Token Structure"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§9.1 Canonical Form"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§9.3 Compact Serialization"
+        },
+        {
+          "id": "RFC 7515",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc7515",
+          "section": "JSON Web Signature"
+        },
+        {
+          "id": "RFC 8032",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc8032",
+          "section": "Ed25519 (published test-key seeds in vectors/test-keys.json)"
+        }
+      ],
+      "expected": "ACCEPT",
+      "description": "The spec repo's generated CGT (examples/tokens/cgt-v1.jwt), ratified byte-for-byte from the Secretless reference broker assertion: a compact EdDSA JWT with the §4.2 claim set, signed by broker-key-1. Verifier MUST ACCEPT."
+    },
+    {
+      "fixture": "fixtures/cgt-general-one-bad-signature.json",
+      "name": "aap-v1/cgt-general-one-bad-signature",
+      "fixtureType": "cgt",
+      "tokenForm": "general",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§9.4 Multi-Signature Form (every declared entry MUST verify)"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§8.2 Cryptographic Agility"
+        }
+      ],
+      "expected": "REJECT[BAD_SIGNATURE]",
+      "description": "The multi-signature CGT with the first entry (broker-key-1) verifying and the second entry declaring kid broker-key-2 but carrying a signature produced by broker-key-1. §9.4: every declared entry MUST verify; a verifier MUST NOT accept a token on a subset of its declared signatures — accepting one-of-two silently drops the post-quantum half of a hybrid credential. Verifier MUST REJECT with BAD_SIGNATURE."
+    },
+    {
+      "fixture": "fixtures/cgt-general-valid.json",
+      "name": "aap-v1/cgt-general-valid",
+      "fixtureType": "cgt",
+      "tokenForm": "general",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§9.4 Multi-Signature Form"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§8.2 Cryptographic Agility"
+        },
+        {
+          "id": "RFC 7515",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc7515",
+          "section": "JSON Web Signature"
+        },
+        {
+          "id": "RFC 8032",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc8032",
+          "section": "Ed25519 (published test-key seeds in vectors/test-keys.json)"
+        }
+      ],
+      "expected": "ACCEPT",
+      "description": "The spec repo's generated multi-signature CGT (examples/tokens/cgt-v1.general.json): the §4.2 claim set as JWS General JSON Serialization with two Ed25519 entries (broker-key-1, broker-key-2), each protected header exactly {alg, kid} per §9.4. Both declared entries verify. Verifier MUST ACCEPT."
+    },
+    {
+      "fixture": "fixtures/da-compact-scope-superset.json",
+      "name": "aap-v1/da-compact-scope-superset",
+      "fixtureType": "da",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§5.2 Constraints (scope subsetting)"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§5.3 Assertion Form"
+        }
+      ],
+      "expected": "REJECT[SCOPE_NOT_SUBSET]",
+      "description": "A DA whose scope (orders.read orders.write) is a SUPERSET of the delegator's CGT scope (orders.read) — delegation widened authority. §5.2: the delegatee scope MUST be a subset of the delegator's scope; the minting broker enforces it and verifiers re-check it. Both tokens carry valid signatures and schema-valid claims; the subset relation is the sole defect. Verifier MUST REJECT with SCOPE_NOT_SUBSET."
+    },
+    {
+      "fixture": "fixtures/da-compact-valid.json",
+      "name": "aap-v1/da-compact-valid",
+      "fixtureType": "da",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§5.3 Assertion Form"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§5.2 Constraints (scope subsetting)"
+        },
+        {
+          "id": "RFC 7515",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc7515",
+          "section": "JSON Web Signature"
+        },
+        {
+          "id": "RFC 8032",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc8032",
+          "section": "Ed25519 (published test-key seeds in vectors/test-keys.json)"
+        }
+      ],
+      "expected": "ACCEPT",
+      "description": "The spec repo's generated DA (examples/tokens/da-v1.jwt): the CGT claim set plus the RFC 8693 delegation members (act.sub, max_depth, delegator_atx), signed by broker-key-1. The delegation context carries the delegator's CGT; the DA scope (orders.read) is a subset of the delegator scope (orders.read). Verifier MUST ACCEPT."
+    }
+  ]
+}

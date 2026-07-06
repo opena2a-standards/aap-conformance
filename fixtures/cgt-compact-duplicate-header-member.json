@@ -1,0 +1,43 @@
+{
+  "$schema": "https://aap.opena2a.org/schemas/fixture-v1.json",
+  "name": "aap-v1/cgt-compact-duplicate-header-member",
+  "description": "A CGT whose protected header bytes contain the alg member twice: {\"alg\":\"EdDSA\",...,\"alg\":\"none\"}. A last-wins JSON parser sees alg none; a first-wins parser sees alg EdDSA and a signature that verifies — the classic duplicate-member smuggling split. A verifier MUST strict-parse the protected header and reject duplicate members (§9.2 closed header; RFC 8259 duplicate names are undefined behavior). Verifier MUST REJECT with MALFORMED_HEADER.",
+  "fixtureType": "cgt",
+  "tokenForm": "compact",
+  "spec": [
+    {
+      "id": "AAP",
+      "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+      "section": "§9.2 Protected Header (strict parse)"
+    },
+    {
+      "id": "RFC 8259",
+      "ref": "https://datatracker.ietf.org/doc/html/rfc8259",
+      "section": "§4 (duplicate object names)"
+    }
+  ],
+  "verifierState": {
+    "clockNumericDate": 1780315230,
+    "keys": [
+      {
+        "kid": "broker-key-1",
+        "publicJwk": {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "ebVWLo_mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ",
+          "kid": "broker-key-1",
+          "use": "sig",
+          "alg": "EdDSA"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "verifyResult": "REJECT",
+    "rejectCategory": "MALFORMED_HEADER",
+    "reasonContains": "duplicate"
+  },
+  "schemaValid": true,
+  "headerSchemaValid": false,
+  "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImJyb2tlci1rZXktMSIsImFsZyI6Im5vbmUifQ.eyJpc3MiOiJodHRwczovL2Jyb2tlci5hY21lLmV4YW1wbGUiLCJzdWIiOiJkaWQ6b3BlbmEyYTphZ2VudDphY21lL29yZGVycy1yZWFkZXIiLCJhdWQiOiJodHRwczovL2FwaS5vcmRlcnMuaW50ZXJuYWwiLCJzY29wZSI6Im9yZGVycy5yZWFkIiwidHJ1c3RfY2xhc3MiOiJvcmRlcnM6cmVhZCIsImlzc3Vlcl9jaGFpbiI6WyJkaWQ6b3BlbmEyYTphdXRob3JpdHk6b3BlbmEyYS5vcmciXSwidHJ1c3RfbGV2ZWwiOjQsImlhdCI6MTc4MDMxNTIwMCwiZXhwIjoxNzgwMzE1NTAwLCJqdGkiOiIyYjNjNGQ1ZTZmNzA4MTkyYTNiNGM1ZDZlN2Y4MDkxYSJ9.b6SoVbyeWzv8lfUVSfrP5JqY1phdi3zx-yTvhXjXKfhnPi34-3pnJBtc3S6f5aqcfBoiUQ1iQUW6X-8xlqjOBA"
+}
