@@ -16,12 +16,13 @@ and report PASS or FAIL per vector. Fixture bytes are pinned in
 Run it:
 
 ```bash
+npm install   # @noble/post-quantum, for the ML-DSA-65 fixtures (RFC 9964)
 node verifiers/node/verify.mjs fixtures
-# summary: 17 pass, 0 fail (17 fixtures)
+# summary: 24 pass, 0 fail (24 fixtures)
 
 pip install -r verifiers/python/requirements.txt
 python3 verifiers/python/verify.py fixtures
-# summary: 17 pass, 0 fail (17 fixtures)
+# summary: 24 pass, 0 fail (24 fixtures)
 ```
 
 The verifier pair is Node + Python deliberately (the
@@ -98,10 +99,24 @@ Two parsing rules are load-bearing and deliberately asymmetric:
   RFC 7519 §4 explicitly permits and which `JSON.parse` and Python
   `json.loads` implement identically.
 
-What this suite does NOT verify (v0.1):
+Post-quantum coverage (AAP-SPEC 0.4, RFC 9964): the suite carries real
+ML-DSA-65 signatures — a compact PQ-interop ACCEPT fixture, a hybrid
+Ed25519 + ML-DSA-65 General JSON ACCEPT fixture, hybrid negatives (either
+half's signature corrupted MUST reject; a stripped hybrid missing the
+Ed25519 family rejects `HYBRID_INCOMPLETE`), and an `ML-DSA-44` header
+fixture pinning that JOSE-registered-but-not-AAP-registered suites reject
+`UNKNOWN_ALG`. §8.1 replay prevention is fixture-tested too: presenting the
+same token twice rejects `REPLAYED_JTI`. ML-DSA-65 fixture bytes are FIPS 204
+deterministic signatures cross-verified by three independent implementations
+(dilithium-py in the spec repo's generator, @noble/post-quantum here, OpenSSL
+via Node ≥ 25). The verifiers take one PQ dependency each — `npm install`
+(@noble/post-quantum) for Node, `dilithium-py` for Python — Ed25519 stays on
+node:crypto / cryptography.
 
-- ML-DSA-65 signatures (§9.5): reserved pending IETF JOSE registration; no
-  AAP token declares the suite yet, so no fixture can carry a real one.
+What this suite does NOT verify (v0.2):
+
+- §8.2 key exchange (hybrid X25519 + ML-KEM-768): transport key negotiation,
+  not token wire form; ML-KEM has no final JOSE registration yet.
 - Broker-profile runtime behavior (CPI endpoints, grant references,
   revocation propagation): protocol flows, not token wire form. The
   grant-reference ABNF is validated in the spec repo's own CI.

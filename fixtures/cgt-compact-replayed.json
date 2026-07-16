@@ -1,0 +1,44 @@
+{
+  "$schema": "https://aap.opena2a.org/schemas/fixture-v1.json",
+  "name": "aap-v1/cgt-compact-replayed",
+  "description": "The spec repo's cgt-v1.jwt presented TWICE to the same verifier (presentations: 2). §8.1: receivers MUST track used jti values for the token's TTL window and MUST reject a repeated identifier. The first presentation is accepted; the expected verdict pins the second. Verifier MUST REJECT with REPLAYED_JTI.",
+  "fixtureType": "cgt",
+  "tokenForm": "compact",
+  "spec": [
+    {
+      "id": "AAP",
+      "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+      "section": "§8.1 Replay Prevention"
+    },
+    {
+      "id": "AAP",
+      "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+      "section": "§4.2 Token Structure"
+    }
+  ],
+  "verifierState": {
+    "clockNumericDate": 1780315230,
+    "keys": [
+      {
+        "kid": "broker-key-1",
+        "publicJwk": {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "ebVWLo_mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ",
+          "kid": "broker-key-1",
+          "use": "sig",
+          "alg": "EdDSA"
+        }
+      }
+    ]
+  },
+  "presentations": 2,
+  "expected": {
+    "verifyResult": "REJECT",
+    "rejectCategory": "REPLAYED_JTI",
+    "reasonContains": "jti"
+  },
+  "schemaValid": true,
+  "headerSchemaValid": true,
+  "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImJyb2tlci1rZXktMSJ9.eyJpc3MiOiJodHRwczovL2Jyb2tlci5hY21lLmV4YW1wbGUiLCJzdWIiOiJkaWQ6b3BlbmEyYTphZ2VudDphY21lL29yZGVycy1yZWFkZXIiLCJhdWQiOiJodHRwczovL2FwaS5vcmRlcnMuaW50ZXJuYWwiLCJzY29wZSI6Im9yZGVycy5yZWFkIiwidHJ1c3RfY2xhc3MiOiJvcmRlcnM6cmVhZCIsImlzc3Vlcl9jaGFpbiI6WyJkaWQ6b3BlbmEyYTphdXRob3JpdHk6b3BlbmEyYS5vcmciXSwidHJ1c3RfbGV2ZWwiOjQsImlhdCI6MTc4MDMxNTIwMCwiZXhwIjoxNzgwMzE1NTAwLCJqdGkiOiI5ZjhlN2Q2YzViNGEzOTI4MTcwNmY1ZTRkM2MyYjFhMCJ9.7zmUIjgHLztQBSxtz38bKM5_lvta8WshMA_e6zRdW4_MhUb7fw1A5dAQMAWOJUKZklBFmdJf_vfoL0_0B-eJBA"
+}

@@ -1,20 +1,29 @@
 #!/usr/bin/env node
 // Reference Node.js verifier for aap-conformance fixtures.
-// Pure Node stdlib — no third-party dependencies. Runs on Node ≥ 18
-// (Ed25519 verification ships through OpenSSL via crypto.verify).
+// Node stdlib plus exactly one third-party dependency: @noble/post-quantum
+// for ML-DSA-65 (FIPS 204 / RFC 9964) — Ed25519 verification stays on
+// node:crypto/OpenSSL. Runs on Node ≥ 18 (`npm install` first).
 //
 // Node is one half of the deliberate verifier pair: the AAP reference broker
 // (Secretless) is TypeScript, so this verifier exercises the same JOSE
-// primitives (node:crypto Ed25519 over the JWS Signing Input) the reference
-// mints with.
+// primitives (node:crypto Ed25519 + noble ML-DSA-65 over the JWS Signing
+// Input) the reference mints with.
 //
 // Check order is pinned and MUST match verifiers/python/verify.py exactly —
 // the parity gate compares reject categories, so both implementations must
 // discover the same defect first:
 //
 //   MALFORMED_TOKEN > MALFORMED_HEADER > UNKNOWN_HEADER_PARAM > UNKNOWN_ALG >
-//   UNKNOWN_KEY > BAD_SIGNATURE > MALFORMED_PAYLOAD > CLAIM_SCHEMA >
-//   EXPIRED > TTL_WINDOW > (DELEGATOR_INVALID >) SCOPE_NOT_SUBSET
+//   UNKNOWN_KEY > BAD_SIGNATURE > HYBRID_INCOMPLETE > MALFORMED_PAYLOAD >
+//   CLAIM_SCHEMA > EXPIRED > TTL_WINDOW > (DELEGATOR_INVALID >)
+//   SCOPE_NOT_SUBSET > REPLAYED_JTI
+//
+// HYBRID_INCOMPLETE sits after BAD_SIGNATURE: the family gate (AAP-SPEC §9.4:
+// a general-form token declaring any ML-DSA-65 entry MUST carry ≥1 Ed25519
+// AND ≥1 ML-DSA-65 entry) is judged only once every declared entry verifies.
+// REPLAYED_JTI is last: replay is only decidable for an otherwise-acceptable
+// token (§8.1; a fixture presents the same token `presentations` times to one
+// verifier, and the expected verdict pins the final presentation).
 //
 // Parsing rules (AAP-SPEC §9.2, and the atx-conformance duplicate-key lesson):
 //   - the protected header is STRICT-parsed: duplicate members at any depth
@@ -30,13 +39,16 @@
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { createPublicKey, verify as cryptoVerify } from "node:crypto";
+import { ml_dsa65 } from "@noble/post-quantum/ml-dsa.js";
 
 const B64URL_RE = /^[A-Za-z0-9_-]+$/;
 const DID_RE = /^did:/;
 const JTI_RE = /^[0-9a-f]{32}$/;
 const TRUST_CLASS_RE = /^[a-z0-9_-]+:[a-z0-9_-]+$/;
 const SHA256_REF_RE = /^sha256:[0-9a-f]{64}$/;
-const SUITE_REGISTRY = ["EdDSA"]; // AAP-SPEC §9.5 (ML-DSA-65 reserved, unregistered)
+// AAP-SPEC §9.5: EdDSA (RFC 8037) + ML-DSA-65 (FIPS 204, JOSE registration
+// RFC 9964). ML-DSA-44/87, though JOSE-registered, are NOT in the AAP registry.
+const SUITE_REGISTRY = ["EdDSA", "ML-DSA-65"];
 const BAC_TTL_SECONDS = 60; // AAP-SPEC §6.1
 
 const SPKI_ED25519_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
@@ -162,17 +174,41 @@ function b64urlDecode(segment, what, category) {
 function buildKeySet(verifierState) {
   const keys = new Map();
   for (const entry of verifierState.keys ?? []) {
+    if (entry.publicJwk.kty === "AKP") {
+      // RFC 9964 AKP JWK: `pub` is the base64url FIPS 204 public key; `alg`
+      // is REQUIRED on AKP keys and names the suite.
+      keys.set(entry.kid, {
+        suite: entry.publicJwk.alg,
+        mlDsaPub: Buffer.from(entry.publicJwk.pub, "base64url"),
+      });
+      continue;
+    }
     const raw = Buffer.from(entry.publicJwk.x, "base64url");
-    keys.set(
-      entry.kid,
-      createPublicKey({
+    keys.set(entry.kid, {
+      suite: "EdDSA",
+      keyObject: createPublicKey({
         key: Buffer.concat([SPKI_ED25519_PREFIX, raw]),
         format: "der",
         type: "spki",
       }),
-    );
+    });
   }
   return keys;
+}
+
+// --- suite dispatch (AAP-SPEC §9.5) -----------------------------------------------
+
+function suiteVerify(alg, key, signingInput, sigBytes) {
+  if (alg === "ML-DSA-65") {
+    try {
+      // Empty context, pure ML-DSA (RFC 9964). Malformed signature bytes
+      // (e.g. wrong length) count as a non-verifying signature, fail closed.
+      return ml_dsa65.verify(sigBytes, signingInput, key.mlDsaPub);
+    } catch {
+      return false;
+    }
+  }
+  return cryptoVerify(null, signingInput, key.keyObject, sigBytes);
 }
 
 // --- protected header (compact: closed {alg, typ, kid}; general: {alg, kid}) -----
@@ -214,6 +250,14 @@ function checkHeader(headerBytes, keys, allowedMembers, where) {
   }
   if (!keys.has(header.kid)) {
     reject("UNKNOWN_KEY", `${where}: kid "${header.kid}" not in the verifier's key set`);
+  }
+  if (keys.get(header.kid).suite !== header.alg) {
+    // The kid must name a key of the declared suite: the verifier has no key
+    // for this (kid, alg) pair, so the token is unverifiable, fail closed.
+    reject(
+      "UNKNOWN_KEY",
+      `${where}: kid "${header.kid}" is not a key for the declared suite "${header.alg}"`,
+    );
   }
   return header;
 }
@@ -376,7 +420,7 @@ function verifyCompactStructure(token, keys) {
   const header = checkHeader(headerBytes, keys, ["alg", "typ", "kid"], "header");
 
   const signingInput = Buffer.from(`${h}.${p}`, "ascii");
-  if (!cryptoVerify(null, signingInput, keys.get(header.kid), sigBytes)) {
+  if (!suiteVerify(header.alg, keys.get(header.kid), signingInput, sigBytes)) {
     reject("BAD_SIGNATURE", `signature does not verify under kid "${header.kid}"`);
   }
 
@@ -398,6 +442,7 @@ function verifyGeneralStructure(tokenGeneral, keys) {
   if (!Array.isArray(signatures) || signatures.length === 0) {
     reject("MALFORMED_TOKEN", "signatures must be a non-empty array");
   }
+  const declaredAlgs = [];
   signatures.forEach((entry, index) => {
     if (!isPlainObject(entry)) reject("MALFORMED_TOKEN", `signatures[${index}] is not an object`);
     const protectedBytes = b64urlDecode(entry.protected, `signatures[${index}].protected`, "MALFORMED_TOKEN");
@@ -406,13 +451,25 @@ function verifyGeneralStructure(tokenGeneral, keys) {
     const header = checkHeader(protectedBytes, keys, ["alg", "kid"], `signatures[${index}]`);
     const signingInput = Buffer.from(`${entry.protected}.${payload}`, "ascii");
     // Every declared entry MUST verify (§9.4) — no subset acceptance.
-    if (!cryptoVerify(null, signingInput, keys.get(header.kid), sigBytes)) {
+    if (!suiteVerify(header.alg, keys.get(header.kid), signingInput, sigBytes)) {
       reject(
         "BAD_SIGNATURE",
         `signatures[${index}] does not verify under its declared kid "${header.kid}" — every declared entry MUST verify (AAP-SPEC §9.4)`,
       );
     }
+    declaredAlgs.push(header.alg);
   });
+  // Hybrid family gate (§8.2/§9.4): a general-form token declaring any
+  // ML-DSA-65 entry is on the hybrid profile and MUST carry at least one
+  // Ed25519 entry and at least one ML-DSA-65 entry — a stripped hybrid MUST
+  // NOT degrade to single-family acceptance. Judged only after every declared
+  // entry verifies, so a bad signature is always the earlier defect.
+  if (declaredAlgs.includes("ML-DSA-65") && !declaredAlgs.includes("EdDSA")) {
+    reject(
+      "HYBRID_INCOMPLETE",
+      "general-form token declares ML-DSA-65 but carries no Ed25519 entry — the hybrid profile requires at least one entry of each family (AAP-SPEC §9.4)",
+    );
+  }
   let claims;
   try {
     claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
@@ -424,6 +481,19 @@ function verifyGeneralStructure(tokenGeneral, keys) {
 }
 
 function verifyFixture(fixture) {
+  // §8.1 replay prevention: one jti cache per verifier lifetime. A fixture may
+  // present its token `presentations` times (default 1); the expected verdict
+  // pins the final presentation.
+  const jtiCache = new Map();
+  const presentations = Number.isInteger(fixture.presentations) ? fixture.presentations : 1;
+  let result = null;
+  for (let n = 0; n < presentations; n++) {
+    result = verifyPresentation(fixture, jtiCache);
+  }
+  return result;
+}
+
+function verifyPresentation(fixture, jtiCache) {
   const keys = buildKeySet(fixture.verifierState ?? {});
   const clock = fixture.verifierState?.clockNumericDate;
   const fixtureType = fixture.fixtureType;
@@ -466,6 +536,20 @@ function verifyFixture(fixture) {
         );
       }
     }
+
+    // §8.1: receivers MUST track used jti values for the token's TTL window
+    // and MUST reject a repeated identifier. Judged last — replay is only
+    // decidable for an otherwise-acceptable token. The identifier is scoped
+    // per issuer and remembered until the token's exp.
+    const jtiKey = `${claims.iss}\n${claims.jti}`;
+    const rememberedExp = jtiCache.get(jtiKey);
+    if (rememberedExp !== undefined && (!isInt(clock) || clock < rememberedExp)) {
+      reject(
+        "REPLAYED_JTI",
+        `jti "${claims.jti}" was already presented and its TTL window has not elapsed (AAP-SPEC §8.1)`,
+      );
+    }
+    jtiCache.set(jtiKey, claims.exp);
 
     return { accepted: true, category: null, reason: "" };
   } catch (err) {

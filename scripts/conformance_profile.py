@@ -27,7 +27,7 @@ SUITE = {
     "spec": {
         "id": "AAP",
         "name": "Agent Authorization Protocol",
-        "version": "0.3.0-draft",
+        "version": "0.4.0-draft",
         "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
     },
     "fixtureManifest": "MANIFEST.sha256",
@@ -35,18 +35,18 @@ SUITE = {
         {
             "language": "node",
             "path": "verifiers/node",
-            "coverage": "full fixture set; exercises the same node:crypto JOSE primitives the TypeScript reference broker (Secretless) mints with",
+            "coverage": "full fixture set; exercises the same primitives the TypeScript reference broker (Secretless) mints with — node:crypto Ed25519 plus @noble/post-quantum ML-DSA-65 (RFC 9964)",
         },
         {
             "language": "python",
             "path": "verifiers/python",
-            "coverage": "full fixture set; mirrors the spec repo's Python fixture generator from the verification side",
+            "coverage": "full fixture set; mirrors the spec repo's Python fixture generator from the verification side (cryptography Ed25519 plus dilithium-py ML-DSA-65)",
         },
     ],
     "notCovered": [
         {
-            "specSection": "§9.5 ML-DSA-65 suite",
-            "reason": "reserved pending IETF JOSE registration; no AAP token declares it, so no fixture can carry a real ML-DSA-65 signature yet",
+            "specSection": "§8.2 key exchange (hybrid X25519 + ML-KEM-768)",
+            "reason": "transport key negotiation, not token wire form; ML-KEM has no final JOSE registration, so that row of §8.2 remains reserved",
         },
         {
             "specSection": "§7 cross-organizational federation and broker-profile runtime behavior (CPI endpoints, grant references, revocation propagation)",

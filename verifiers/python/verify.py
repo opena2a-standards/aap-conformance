@@ -1,19 +1,29 @@
 #!/usr/bin/env python3
 """Reference Python verifier for aap-conformance fixtures.
 
-Depends only on the `cryptography` package; Python stdlib for everything
-else. Python is the second half of the deliberate verifier pair: the AAP
-spec repo's fixture generator (agent-authorization-protocol
-scripts/generate_examples.py) is Python, so this verifier re-checks the
-same construction from the spec's side of the fence.
+Depends on exactly two third-party packages: `cryptography` for Ed25519 and
+`dilithium-py` (pure-Python FIPS 204) for ML-DSA-65 (RFC 9964); Python
+stdlib for everything else. Python is the second half of the deliberate
+verifier pair: the AAP spec repo's fixture generator
+(agent-authorization-protocol scripts/generate_examples.py) is Python, so
+this verifier re-checks the same construction from the spec's side of the
+fence.
 
 Check order is pinned and MUST match verifiers/node/verify.mjs exactly —
 the parity gate compares reject categories, so both implementations must
 discover the same defect first:
 
     MALFORMED_TOKEN > MALFORMED_HEADER > UNKNOWN_HEADER_PARAM > UNKNOWN_ALG >
-    UNKNOWN_KEY > BAD_SIGNATURE > MALFORMED_PAYLOAD > CLAIM_SCHEMA >
-    EXPIRED > TTL_WINDOW > (DELEGATOR_INVALID >) SCOPE_NOT_SUBSET
+    UNKNOWN_KEY > BAD_SIGNATURE > HYBRID_INCOMPLETE > MALFORMED_PAYLOAD >
+    CLAIM_SCHEMA > EXPIRED > TTL_WINDOW > (DELEGATOR_INVALID >)
+    SCOPE_NOT_SUBSET > REPLAYED_JTI
+
+HYBRID_INCOMPLETE sits after BAD_SIGNATURE: the family gate (AAP-SPEC §9.4:
+a general-form token declaring any ML-DSA-65 entry MUST carry ≥1 Ed25519
+AND ≥1 ML-DSA-65 entry) is judged only once every declared entry verifies.
+REPLAYED_JTI is last: replay is only decidable for an otherwise-acceptable
+token (§8.1; a fixture presents the same token `presentations` times to one
+verifier, and the expected verdict pins the final presentation).
 
 Parsing rules (AAP-SPEC §9.2, and the atx-conformance duplicate-key lesson):
   - the protected header is STRICT-parsed: duplicate members at any depth
@@ -39,13 +49,16 @@ from typing import Any, Callable
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+from dilithium_py.ml_dsa import ML_DSA_65
 
 B64URL_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 DID_RE = re.compile(r"^did:")
 JTI_RE = re.compile(r"^[0-9a-f]{32}$")
 TRUST_CLASS_RE = re.compile(r"^[a-z0-9_-]+:[a-z0-9_-]+$")
 SHA256_REF_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
-SUITE_REGISTRY = ("EdDSA",)  # AAP-SPEC §9.5 (ML-DSA-65 reserved, unregistered)
+# AAP-SPEC §9.5: EdDSA (RFC 8037) + ML-DSA-65 (FIPS 204, JOSE registration
+# RFC 9964). ML-DSA-44/87, though JOSE-registered, are NOT in the AAP registry.
+SUITE_REGISTRY = ("EdDSA", "ML-DSA-65")
 BAC_TTL_SECONDS = 60  # AAP-SPEC §6.1
 
 
@@ -93,14 +106,49 @@ def _b64url_decode(segment: Any, what: str, category: str) -> bytes:
 # --- key resolution ---------------------------------------------------------------
 
 
-def build_key_set(verifier_state: dict) -> dict[str, Ed25519PublicKey]:
-    keys: dict[str, Ed25519PublicKey] = {}
+@dataclass
+class KeyEntry:
+    suite: str
+    key_object: Ed25519PublicKey | None = None
+    ml_dsa_pub: bytes | None = None
+
+
+def build_key_set(verifier_state: dict) -> dict[str, KeyEntry]:
+    keys: dict[str, KeyEntry] = {}
     for entry in verifier_state.get("keys", []):
-        raw = base64.urlsafe_b64decode(
-            entry["publicJwk"]["x"] + "=" * (-len(entry["publicJwk"]["x"]) % 4)
+        jwk = entry["publicJwk"]
+        if jwk["kty"] == "AKP":
+            # RFC 9964 AKP JWK: `pub` is the base64url FIPS 204 public key;
+            # `alg` is REQUIRED on AKP keys and names the suite.
+            keys[entry["kid"]] = KeyEntry(
+                suite=jwk["alg"],
+                ml_dsa_pub=base64.urlsafe_b64decode(jwk["pub"] + "=" * (-len(jwk["pub"]) % 4)),
+            )
+            continue
+        raw = base64.urlsafe_b64decode(jwk["x"] + "=" * (-len(jwk["x"]) % 4))
+        keys[entry["kid"]] = KeyEntry(
+            suite="EdDSA",
+            key_object=Ed25519PublicKey.from_public_bytes(raw),
         )
-        keys[entry["kid"]] = Ed25519PublicKey.from_public_bytes(raw)
     return keys
+
+
+# --- suite dispatch (AAP-SPEC §9.5) -------------------------------------------------
+
+
+def suite_verify(alg: str, key: KeyEntry, signing_input: bytes, sig_bytes: bytes) -> bool:
+    if alg == "ML-DSA-65":
+        try:
+            # Empty context, pure ML-DSA (RFC 9964). Malformed signature bytes
+            # (e.g. wrong length) count as a non-verifying signature, fail closed.
+            return ML_DSA_65.verify(key.ml_dsa_pub, signing_input, sig_bytes)
+        except Exception:
+            return False
+    try:
+        key.key_object.verify(sig_bytes, signing_input)
+        return True
+    except InvalidSignature:
+        return False
 
 
 # --- protected header (compact: closed {alg, typ, kid}; general: {alg, kid}) ------
@@ -108,7 +156,7 @@ def build_key_set(verifier_state: dict) -> dict[str, Ed25519PublicKey]:
 
 def check_header(
     header_bytes: bytes,
-    keys: dict[str, Ed25519PublicKey],
+    keys: dict[str, KeyEntry],
     allowed_members: tuple[str, ...],
     where: str,
 ) -> dict:
@@ -139,6 +187,13 @@ def check_header(
         _reject("MALFORMED_HEADER", f"{where}: missing or empty kid")
     if kid not in keys:
         _reject("UNKNOWN_KEY", f'{where}: kid "{kid}" not in the verifier\'s key set')
+    if keys[kid].suite != alg:
+        # The kid must name a key of the declared suite: the verifier has no key
+        # for this (kid, alg) pair, so the token is unverifiable, fail closed.
+        _reject(
+            "UNKNOWN_KEY",
+            f'{where}: kid "{kid}" is not a key for the declared suite "{alg}"',
+        )
     return header
 
 
@@ -296,7 +351,7 @@ def check_claims(claims: dict, fixture_type: str) -> None:
 # --- token verification -------------------------------------------------------------
 
 
-def verify_compact_structure(token: Any, keys: dict[str, Ed25519PublicKey]) -> dict:
+def verify_compact_structure(token: Any, keys: dict[str, KeyEntry]) -> dict:
     if not isinstance(token, str):
         _reject("MALFORMED_TOKEN", "token is not a string")
     segments = token.split(".")
@@ -309,9 +364,8 @@ def verify_compact_structure(token: Any, keys: dict[str, Ed25519PublicKey]) -> d
 
     header = check_header(header_bytes, keys, ("alg", "typ", "kid"), "header")
 
-    try:
-        keys[header["kid"]].verify(sig_bytes, f"{h}.{p}".encode("ascii"))
-    except InvalidSignature:
+    signing_input = f"{h}.{p}".encode("ascii")
+    if not suite_verify(header["alg"], keys[header["kid"]], signing_input, sig_bytes):
         _reject("BAD_SIGNATURE", f'signature does not verify under kid "{header["kid"]}"')
 
     try:
@@ -324,7 +378,7 @@ def verify_compact_structure(token: Any, keys: dict[str, Ed25519PublicKey]) -> d
     return claims
 
 
-def verify_general_structure(token_general: Any, keys: dict[str, Ed25519PublicKey]) -> dict:
+def verify_general_structure(token_general: Any, keys: dict[str, KeyEntry]) -> dict:
     if not _is_plain_object(token_general):
         _reject("MALFORMED_TOKEN", "general serialization is not a JSON object")
     payload = token_general.get("payload")
@@ -332,6 +386,7 @@ def verify_general_structure(token_general: Any, keys: dict[str, Ed25519PublicKe
     _b64url_decode(payload, "payload", "MALFORMED_TOKEN")
     if not isinstance(signatures, list) or len(signatures) == 0:
         _reject("MALFORMED_TOKEN", "signatures must be a non-empty array")
+    declared_algs: list[str] = []
     for index, entry in enumerate(signatures):
         if not _is_plain_object(entry):
             _reject("MALFORMED_TOKEN", f"signatures[{index}] is not an object")
@@ -343,17 +398,26 @@ def verify_general_structure(token_general: Any, keys: dict[str, Ed25519PublicKe
         )
         # General-form per-signature protected headers are exactly {alg, kid} (§9.4).
         header = check_header(protected_bytes, keys, ("alg", "kid"), f"signatures[{index}]")
-        try:
-            # Every declared entry MUST verify (§9.4) — no subset acceptance.
-            keys[header["kid"]].verify(
-                sig_bytes, f'{entry["protected"]}.{payload}'.encode("ascii")
-            )
-        except InvalidSignature:
+        signing_input = f'{entry["protected"]}.{payload}'.encode("ascii")
+        # Every declared entry MUST verify (§9.4) — no subset acceptance.
+        if not suite_verify(header["alg"], keys[header["kid"]], signing_input, sig_bytes):
             _reject(
                 "BAD_SIGNATURE",
                 f'signatures[{index}] does not verify under its declared kid "{header["kid"]}" — '
                 f"every declared entry MUST verify (AAP-SPEC §9.4)",
             )
+        declared_algs.append(header["alg"])
+    # Hybrid family gate (§8.2/§9.4): a general-form token declaring any
+    # ML-DSA-65 entry is on the hybrid profile and MUST carry at least one
+    # Ed25519 entry and at least one ML-DSA-65 entry — a stripped hybrid MUST
+    # NOT degrade to single-family acceptance. Judged only after every declared
+    # entry verifies, so a bad signature is always the earlier defect.
+    if "ML-DSA-65" in declared_algs and "EdDSA" not in declared_algs:
+        _reject(
+            "HYBRID_INCOMPLETE",
+            "general-form token declares ML-DSA-65 but carries no Ed25519 entry — "
+            "the hybrid profile requires at least one entry of each family (AAP-SPEC §9.4)",
+        )
     try:
         claims = json.loads(
             base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)).decode("utf-8")
@@ -378,6 +442,20 @@ class Result:
 
 
 def verify_fixture(fixture: dict) -> Result:
+    # §8.1 replay prevention: one jti cache per verifier lifetime. A fixture may
+    # present its token `presentations` times (default 1); the expected verdict
+    # pins the final presentation.
+    jti_cache: dict[str, int] = {}
+    presentations = fixture.get("presentations")
+    if not _is_int(presentations):
+        presentations = 1
+    result: Result | None = None
+    for _ in range(presentations):
+        result = verify_presentation(fixture, jti_cache)
+    return result
+
+
+def verify_presentation(fixture: dict, jti_cache: dict[str, int]) -> Result:
     verifier_state = fixture.get("verifierState", {})
     keys = build_key_set(verifier_state)
     clock = verifier_state.get("clockNumericDate")
@@ -413,6 +491,20 @@ def verify_fixture(fixture: dict) -> Result:
                     f'DA scope "{claims["scope"]}" is not a subset of the delegator scope '
                     f'"{delegator_claims["scope"]}" (AAP-SPEC §5.2)',
                 )
+
+        # §8.1: receivers MUST track used jti values for the token's TTL window
+        # and MUST reject a repeated identifier. Judged last — replay is only
+        # decidable for an otherwise-acceptable token. The identifier is scoped
+        # per issuer and remembered until the token's exp.
+        jti_key = f"{claims['iss']}\n{claims['jti']}"
+        remembered_exp = jti_cache.get(jti_key)
+        if remembered_exp is not None and (not _is_int(clock) or clock < remembered_exp):
+            _reject(
+                "REPLAYED_JTI",
+                f'jti "{claims["jti"]}" was already presented and its TTL window '
+                f"has not elapsed (AAP-SPEC §8.1)",
+            )
+        jti_cache[jti_key] = claims["exp"]
 
         return Result(accepted=True)
     except Reject as exc:
