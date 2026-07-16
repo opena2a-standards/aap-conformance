@@ -18,8 +18,9 @@ permissions:
 
 env:
   # agent-authorization-protocol ref the vendored schemas and reused ACCEPT
-  # token bytes are pinned to (AAP-SPEC 0.3.0-draft, PR #5 merge).
-  AAP_SPEC_REF: b03def2389d311b67d693595e1295122d9853b8d
+  # token bytes are pinned to (AAP-SPEC 0.4.0-draft, ML-DSA-65 activation,
+  # RFC 9964 — PR #9 merge).
+  AAP_SPEC_REF: b74ae2c99db15c7ba9d99516a52aca5232f0a6ae
 
 jobs:
   conformance:
@@ -36,8 +37,11 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install Python verifier dependency
-        run: python3 -m pip install "cryptography>=42.0.0"
+      - name: Install Python verifier dependencies
+        run: python3 -m pip install -r verifiers/python/requirements.txt
+
+      - name: Install Node dependency (@noble/post-quantum, ML-DSA-65)
+        run: npm ci
 
       - name: Node verifier over fixtures
         working-directory: verifiers/node

@@ -1,0 +1,8 @@
+{
+  "name": "aap-conformance",
+  "private": true,
+  "description": "AAP conformance fixtures and reference verifiers. @noble/post-quantum provides ML-DSA-65 (FIPS 204) for the Node generator and verifier; Ed25519 stays on node:crypto.",
+  "dependencies": {
+    "@noble/post-quantum": "0.6.1"
+  }
+}

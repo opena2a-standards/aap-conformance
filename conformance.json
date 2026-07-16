@@ -4,7 +4,7 @@
   "spec": {
     "id": "AAP",
     "name": "Agent Authorization Protocol",
-    "version": "0.3.0-draft",
+    "version": "0.4.0-draft",
     "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md"
   },
   "fixtureManifest": "MANIFEST.sha256",
@@ -12,18 +12,18 @@
     {
       "language": "node",
       "path": "verifiers/node",
-      "coverage": "full fixture set; exercises the same node:crypto JOSE primitives the TypeScript reference broker (Secretless) mints with"
+      "coverage": "full fixture set; exercises the same primitives the TypeScript reference broker (Secretless) mints with — node:crypto Ed25519 plus @noble/post-quantum ML-DSA-65 (RFC 9964)"
     },
     {
       "language": "python",
       "path": "verifiers/python",
-      "coverage": "full fixture set; mirrors the spec repo's Python fixture generator from the verification side"
+      "coverage": "full fixture set; mirrors the spec repo's Python fixture generator from the verification side (cryptography Ed25519 plus dilithium-py ML-DSA-65)"
     }
   ],
   "notCovered": [
     {
-      "specSection": "§9.5 ML-DSA-65 suite",
-      "reason": "reserved pending IETF JOSE registration; no AAP token declares it, so no fixture can carry a real ML-DSA-65 signature yet"
+      "specSection": "§8.2 key exchange (hybrid X25519 + ML-KEM-768)",
+      "reason": "transport key negotiation, not token wire form; ML-KEM has no final JOSE registration, so that row of §8.2 remains reserved"
     },
     {
       "specSection": "§7 cross-organizational federation and broker-profile runtime behavior (CPI endpoints, grant references, revocation propagation)",
@@ -261,6 +261,27 @@
       "description": "A CGT missing the REQUIRED trust_class claim (§4.2). Everything else is valid, including the signature. Verifier MUST REJECT with CLAIM_SCHEMA."
     },
     {
+      "fixture": "fixtures/cgt-compact-replayed.json",
+      "name": "aap-v1/cgt-compact-replayed",
+      "fixtureType": "cgt",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§8.1 Replay Prevention"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§4.2 Token Structure"
+        }
+      ],
+      "expected": "REJECT[REPLAYED_JTI]",
+      "description": "The spec repo's cgt-v1.jwt presented TWICE to the same verifier (presentations: 2). §8.1: receivers MUST track used jti values for the token's TTL window and MUST reject a repeated identifier. The first presentation is accepted; the expected verdict pins the second. Verifier MUST REJECT with REPLAYED_JTI."
+    },
+    {
       "fixture": "fixtures/cgt-compact-trust-class-scope-shaped.json",
       "name": "aap-v1/cgt-compact-trust-class-scope-shaped",
       "fixtureType": "cgt",
@@ -384,6 +405,187 @@
       ],
       "expected": "ACCEPT",
       "description": "The spec repo's generated multi-signature CGT (examples/tokens/cgt-v1.general.json): the §4.2 claim set as JWS General JSON Serialization with two Ed25519 entries (broker-key-1, broker-key-2), each protected header exactly {alg, kid} per §9.4. Both declared entries verify. Verifier MUST ACCEPT."
+    },
+    {
+      "fixture": "fixtures/cgt-hybrid-ed25519-bad-signature.json",
+      "name": "aap-v1/cgt-hybrid-ed25519-bad-signature",
+      "fixtureType": "cgt",
+      "tokenForm": "general",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§9.4 Multi-Signature Form (every declared entry MUST verify)"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§8.2 Cryptographic Agility"
+        },
+        {
+          "id": "RFC 8032",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc8032",
+          "section": "Ed25519 (published test-key seeds in vectors/test-keys.json)"
+        },
+        {
+          "id": "RFC 9964",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc9964",
+          "section": "ML-DSA for JOSE and COSE (the ML-DSA-65 alg and AKP key type)"
+        }
+      ],
+      "expected": "REJECT[BAD_SIGNATURE]",
+      "description": "The hybrid CGT with the ML-DSA-65 entry verifying and the Ed25519 entry declaring kid broker-key-1 but carrying a signature produced by broker-key-2. The post-quantum half alone MUST NOT carry the token: every declared entry verifies or the token rejects (§9.4). Verifier MUST REJECT with BAD_SIGNATURE."
+    },
+    {
+      "fixture": "fixtures/cgt-hybrid-general-valid.json",
+      "name": "aap-v1/cgt-hybrid-general-valid",
+      "fixtureType": "cgt",
+      "tokenForm": "general",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§9.4 Multi-Signature Form (hybrid profile)"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§8.2 Cryptographic Agility"
+        },
+        {
+          "id": "RFC 7515",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc7515",
+          "section": "JSON Web Signature"
+        },
+        {
+          "id": "RFC 8032",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc8032",
+          "section": "Ed25519 (published test-key seeds in vectors/test-keys.json)"
+        },
+        {
+          "id": "RFC 9964",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc9964",
+          "section": "ML-DSA for JOSE and COSE (the ML-DSA-65 alg and AKP key type)"
+        }
+      ],
+      "expected": "ACCEPT",
+      "description": "The spec repo's generated hybrid CGT (examples/tokens/cgt-v1.hybrid.general.json): the §4.2 claim set as JWS General JSON Serialization with one Ed25519 entry (broker-key-1) and one ML-DSA-65 entry (broker-pqc-1) over the same payload — the §8.2 hybrid post-quantum profile. Both declared entries verify and both suite families are present. Verifier MUST ACCEPT."
+    },
+    {
+      "fixture": "fixtures/cgt-hybrid-missing-ed25519.json",
+      "name": "aap-v1/cgt-hybrid-missing-ed25519",
+      "fixtureType": "cgt",
+      "tokenForm": "general",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§9.4 Multi-Signature Form (hybrid family gate)"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§8.2 Cryptographic Agility"
+        },
+        {
+          "id": "RFC 9964",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc9964",
+          "section": "ML-DSA for JOSE and COSE (the ML-DSA-65 alg and AKP key type)"
+        }
+      ],
+      "expected": "REJECT[HYBRID_INCOMPLETE]",
+      "description": "A general-form CGT carrying ONLY an ML-DSA-65 entry (which verifies). A general-form token that declares any ML-DSA-65 entry is on the §8.2 hybrid profile and MUST carry at least one Ed25519 entry and at least one ML-DSA-65 entry — a stripped hybrid MUST NOT degrade to single-family acceptance (§9.4). Verifier MUST REJECT with HYBRID_INCOMPLETE."
+    },
+    {
+      "fixture": "fixtures/cgt-hybrid-mldsa-bad-signature.json",
+      "name": "aap-v1/cgt-hybrid-mldsa-bad-signature",
+      "fixtureType": "cgt",
+      "tokenForm": "general",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§9.4 Multi-Signature Form (every declared entry MUST verify)"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§8.2 Cryptographic Agility"
+        },
+        {
+          "id": "RFC 9964",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc9964",
+          "section": "ML-DSA for JOSE and COSE (the ML-DSA-65 alg and AKP key type)"
+        }
+      ],
+      "expected": "REJECT[BAD_SIGNATURE]",
+      "description": "The hybrid CGT with the Ed25519 entry verifying and the ML-DSA-65 entry carrying a deterministically corrupted signature (first byte flipped). §9.4: every declared entry MUST verify — accepting the classical half alone silently drops the post-quantum half of a hybrid credential. Verifier MUST REJECT with BAD_SIGNATURE."
+    },
+    {
+      "fixture": "fixtures/cgt-mldsa44-compact-unknown-alg.json",
+      "name": "aap-v1/cgt-mldsa44-compact-unknown-alg",
+      "fixtureType": "cgt",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§9.5 Suite Registry (v1)"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§8.2 Cryptographic Agility (no silent downgrade)"
+        },
+        {
+          "id": "RFC 9964",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc9964",
+          "section": "ML-DSA for JOSE and COSE (the ML-DSA-65 alg and AKP key type)"
+        }
+      ],
+      "expected": "REJECT[UNKNOWN_ALG]",
+      "description": "A compact CGT whose protected header declares alg ML-DSA-44 — registered for JOSE by RFC 9964 but absent from the AAP §9.5 registry (only ML-DSA-65 is). The signature is a real ML-DSA-65 signature over these exact bytes; the verifier MUST reject the unregistered suite at the header stage rather than downgrade or guess (§8.2). Verifier MUST REJECT with UNKNOWN_ALG."
+    },
+    {
+      "fixture": "fixtures/cgt-mldsa65-compact-valid.json",
+      "name": "aap-v1/cgt-mldsa65-compact-valid",
+      "fixtureType": "cgt",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§9.3 Compact Serialization (PQ-interop lane)"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§9.5 Suite Registry (v1)"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§8.2 Cryptographic Agility"
+        },
+        {
+          "id": "RFC 7515",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc7515",
+          "section": "JSON Web Signature"
+        },
+        {
+          "id": "RFC 9964",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc9964",
+          "section": "ML-DSA for JOSE and COSE (the ML-DSA-65 alg and AKP key type)"
+        }
+      ],
+      "expected": "ACCEPT",
+      "description": "The spec repo's generated PQ-interop CGT (examples/tokens/cgt-v1.mldsa65.jwt): a compact ML-DSA-65 JWT (RFC 9964 suite, FIPS 204 deterministic signature, empty context) with the §4.2 claim shape and its own jti, signed by broker-pqc-1 (RFC 9964 AKP test key). Verifier MUST ACCEPT."
     },
     {
       "fixture": "fixtures/da-compact-scope-superset.json",

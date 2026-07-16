@@ -7,7 +7,8 @@
 // (agent-authorization-protocol scripts/generate_examples.py) byte-for-byte:
 //
 //     signing input = BASE64URL(UTF8(JSON(header))) || "." || BASE64URL(UTF8(JSON(claims)))
-//     signature     = Ed25519(signing input)
+//     signature     = Ed25519(signing input)          suite "EdDSA"
+//                   | ML-DSA-65(signing input)        suite "ML-DSA-65" (RFC 9964)
 //     token         = signing input || "." || BASE64URL(signature)
 //
 // ACCEPT fixtures embed the spec repo's published token bytes unchanged
@@ -15,7 +16,12 @@
 // vectors/test-keys.json); CI drift-gates them against the pinned
 // agent-authorization-protocol ref. REJECT fixtures are single-defect
 // variants minted here with the same construction. Ed25519 signing is
-// deterministic, so fixed seeds + fixed claims = fixed bytes.
+// deterministic, and ML-DSA-65 signing uses the FIPS 204 deterministic
+// variant with empty context (AAP-SPEC §9.7), so fixed seeds + fixed
+// claims = fixed bytes. ML-DSA-65 comes from @noble/post-quantum (the
+// generator's single third-party dependency, shared with the Node verifier);
+// the byte-identity of its deterministic signatures with the spec repo's
+// dilithium-py generator is what the spec-pin CI gate proves.
 //
 // Usage:
 //     node scripts/generate-fixtures.mjs        # (re)write fixtures/ + MANIFEST.sha256
@@ -32,6 +38,7 @@ import {
   sign as cryptoSign,
   verify as cryptoVerify,
 } from "node:crypto";
+import { ml_dsa65 } from "@noble/post-quantum/ml-dsa.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const FIXTURES = join(ROOT, "fixtures");
@@ -52,6 +59,18 @@ const SPKI_ED25519_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
 
 const KEYS = new Map();
 for (const entry of TEST_KEYS.keys) {
+  if (entry.mlDsa65SeedHex) {
+    // ML-DSA-65 key (RFC 9964 AKP JWK; the seed is the FIPS 204 xi input).
+    const { publicKey, secretKey } = ml_dsa65.keygen(
+      Buffer.from(entry.mlDsa65SeedHex, "hex"),
+    );
+    const wantPub = Buffer.from(entry.publicJwk.pub, "base64url");
+    if (!Buffer.from(publicKey).equals(wantPub)) {
+      throw new Error(`test key ${entry.kid}: seed does not derive published AKP pub`);
+    }
+    KEYS.set(entry.kid, { suite: "ML-DSA-65", secretKey, publicKey, jwk: entry.publicJwk });
+    continue;
+  }
   const priv = createPrivateKey({
     key: Buffer.concat([
       PKCS8_ED25519_PREFIX,
@@ -70,7 +89,7 @@ for (const entry of TEST_KEYS.keys) {
   if (!rawPub.equals(wantX)) {
     throw new Error(`test key ${entry.kid}: seed does not derive published JWK x`);
   }
-  KEYS.set(entry.kid, { priv, pub, jwk: entry.publicJwk });
+  KEYS.set(entry.kid, { suite: "EdDSA", priv, pub, jwk: entry.publicJwk });
 }
 
 // --- fixed inputs (identical to the spec repo generator) ----------------------
@@ -100,6 +119,9 @@ const JTI = {
   da: "4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c9d",
   bac: "7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b",
   unknownAlg: "0a1b2c3d4e5f60718293a4b5c6d7e8f9",
+  // The spec repo's PQ-interop compact CGT (generate_examples.py JTI["cgt_pq"]).
+  cgtPq: "b1c2d3e4f5a60718293a4b5c6d7e8f90",
+  mldsa44: "4d5e6f708192a3b4c5d6e7f8091a2b3c",
   critHeader: "1a2b3c4d5e6f708192a3b4c5d6e7f809",
   dupHeader: "2b3c4d5e6f708192a3b4c5d6e7f8091a",
   missingTrustClass: "3c4d5e6f708192a3b4c5d6e7f8091a2b",
@@ -115,11 +137,26 @@ const b64url = (buf) => Buffer.from(buf).toString("base64url");
 const compactJson = (obj) => JSON.stringify(obj);
 
 function signRaw(kid, data) {
-  return cryptoSign(null, Buffer.from(data, "utf8"), KEYS.get(kid).priv);
+  const key = KEYS.get(kid);
+  if (key.suite === "ML-DSA-65") {
+    // FIPS 204 deterministic variant, empty context (AAP-SPEC §9.7 / RFC 9964).
+    return Buffer.from(
+      ml_dsa65.sign(Buffer.from(data, "utf8"), key.secretKey, { extraEntropy: false }),
+    );
+  }
+  return cryptoSign(null, Buffer.from(data, "utf8"), key.priv);
 }
 
 function verifyRaw(kid, data, sig) {
-  return cryptoVerify(null, Buffer.from(data, "utf8"), KEYS.get(kid).pub, sig);
+  const key = KEYS.get(kid);
+  if (key.suite === "ML-DSA-65") {
+    try {
+      return ml_dsa65.verify(sig, Buffer.from(data, "utf8"), key.publicKey);
+    } catch {
+      return false;
+    }
+  }
+  return cryptoVerify(null, Buffer.from(data, "utf8"), key.pub, sig);
 }
 
 /** Mint a compact token; headerJson may be a raw string for malformed-header
@@ -135,18 +172,23 @@ function mintCompact(kid, header, claims, { expectValid = true } = {}) {
   return `${signingInput}.${b64url(sig)}`;
 }
 
-const compactHeader = (kid) => ({ alg: "EdDSA", typ: "JWT", kid });
+const compactHeader = (kid, alg = "EdDSA") => ({ alg, typ: "JWT", kid });
 
 /** JWS General JSON Serialization (RFC 7515 §7.2.1) — AAP-SPEC §9.4.
- *  signWithKid lets an entry declare one kid while signing with another
- *  (the every-declared-entry-MUST-verify reject fixture). */
+ *  Per-entry alg defaults to the kid's suite (the hybrid profile is one EdDSA
+ *  entry + one ML-DSA-65 entry over the same payload). signWithKid lets an
+ *  entry declare one kid while signing with another, and tamperSig
+ *  deterministically corrupts the produced signature (first byte XOR 0xff) —
+ *  the every-declared-entry-MUST-verify reject fixtures. */
 function mintGeneral(entries, claims) {
   const payload = b64url(compactJson(claims));
-  const signatures = entries.map(({ kid, signWithKid }) => {
-    const protectedB64 = b64url(compactJson({ alg: "EdDSA", kid }));
+  const signatures = entries.map(({ kid, signWithKid, tamperSig }) => {
+    const alg = KEYS.get(kid).suite;
+    const protectedB64 = b64url(compactJson({ alg, kid }));
     const sig = signRaw(signWithKid ?? kid, `${protectedB64}.${payload}`);
+    if (tamperSig) sig[0] ^= 0xff;
     const verifies = verifyRaw(kid, `${protectedB64}.${payload}`, sig);
-    const shouldVerify = !signWithKid || signWithKid === kid;
+    const shouldVerify = (!signWithKid || signWithKid === kid) && !tamperSig;
     if (verifies !== shouldVerify) {
       throw new Error(`general entry ${kid}: unexpected self-verify result`);
     }
@@ -228,6 +270,11 @@ const RFC8032 = {
   ref: "https://datatracker.ietf.org/doc/html/rfc8032",
   section: "Ed25519 (published test-key seeds in vectors/test-keys.json)",
 };
+const RFC9964 = {
+  id: "RFC 9964",
+  ref: "https://datatracker.ietf.org/doc/html/rfc9964",
+  section: "ML-DSA for JOSE and COSE (the ML-DSA-65 alg and AKP key type)",
+};
 
 const keyRef = (kid) => ({ kid, publicJwk: KEYS.get(kid).jwk });
 
@@ -246,6 +293,17 @@ const DA_TOKEN = mintCompact("broker-key-1", compactHeader("broker-key-1"), daCl
 const BAC_TOKEN = mintCompact("registry-key-1", compactHeader("registry-key-1"), bacClaims());
 const CGT_GENERAL = mintGeneral(
   [{ kid: "broker-key-1" }, { kid: "broker-key-2" }],
+  cgtClaims(),
+);
+// The two spec-repo PQ tokens (byte-identical to examples/tokens/
+// cgt-v1.mldsa65.jwt and cgt-v1.hybrid.general.json at the pinned ref).
+const CGT_MLDSA65_TOKEN = mintCompact(
+  "broker-pqc-1",
+  compactHeader("broker-pqc-1", "ML-DSA-65"),
+  cgtClaims({ jti: JTI.cgtPq }),
+);
+const CGT_HYBRID = mintGeneral(
+  [{ kid: "broker-key-1" }, { kid: "broker-pqc-1" }],
   cgtClaims(),
 );
 
@@ -319,6 +377,31 @@ fixture("cgt-general-valid", {
   expected: { verifyResult: "ACCEPT" },
   schemaValid: true,
   tokenGeneral: CGT_GENERAL,
+});
+
+fixture("cgt-mldsa65-compact-valid", {
+  description:
+    "The spec repo's generated PQ-interop CGT (examples/tokens/cgt-v1.mldsa65.jwt): a compact ML-DSA-65 JWT (RFC 9964 suite, FIPS 204 deterministic signature, empty context) with the §4.2 claim shape and its own jti, signed by broker-pqc-1 (RFC 9964 AKP test key). Verifier MUST ACCEPT.",
+  fixtureType: "cgt",
+  tokenForm: "compact",
+  spec: [ref("§9.3 Compact Serialization (PQ-interop lane)"), ref("§9.5 Suite Registry (v1)"), ref("§8.2 Cryptographic Agility"), RFC7515, RFC9964],
+  verifierState: state(["broker-pqc-1"]),
+  expected: { verifyResult: "ACCEPT" },
+  schemaValid: true,
+  headerSchemaValid: true,
+  token: CGT_MLDSA65_TOKEN,
+});
+
+fixture("cgt-hybrid-general-valid", {
+  description:
+    "The spec repo's generated hybrid CGT (examples/tokens/cgt-v1.hybrid.general.json): the §4.2 claim set as JWS General JSON Serialization with one Ed25519 entry (broker-key-1) and one ML-DSA-65 entry (broker-pqc-1) over the same payload — the §8.2 hybrid post-quantum profile. Both declared entries verify and both suite families are present. Verifier MUST ACCEPT.",
+  fixtureType: "cgt",
+  tokenForm: "general",
+  spec: [ref("§9.4 Multi-Signature Form (hybrid profile)"), ref("§8.2 Cryptographic Agility"), RFC7515, RFC8032, RFC9964],
+  verifierState: state(["broker-key-1", "broker-pqc-1"]),
+  expected: { verifyResult: "ACCEPT" },
+  schemaValid: true,
+  tokenGeneral: CGT_HYBRID,
 });
 
 // -------- REJECT ----------------------------------------------------------------
@@ -503,6 +586,79 @@ fixture("cgt-general-one-bad-signature", {
     [{ kid: "broker-key-1" }, { kid: "broker-key-2", signWithKid: "broker-key-1" }],
     cgtClaims(),
   ),
+});
+
+fixture("cgt-hybrid-mldsa-bad-signature", {
+  description:
+    "The hybrid CGT with the Ed25519 entry verifying and the ML-DSA-65 entry carrying a deterministically corrupted signature (first byte flipped). §9.4: every declared entry MUST verify — accepting the classical half alone silently drops the post-quantum half of a hybrid credential. Verifier MUST REJECT with BAD_SIGNATURE.",
+  fixtureType: "cgt",
+  tokenForm: "general",
+  spec: [ref("§9.4 Multi-Signature Form (every declared entry MUST verify)"), ref("§8.2 Cryptographic Agility"), RFC9964],
+  verifierState: state(["broker-key-1", "broker-pqc-1"]),
+  expected: { verifyResult: "REJECT", rejectCategory: "BAD_SIGNATURE", reasonContains: "signature" },
+  schemaValid: true,
+  tokenGeneral: mintGeneral(
+    [{ kid: "broker-key-1" }, { kid: "broker-pqc-1", tamperSig: true }],
+    cgtClaims(),
+  ),
+});
+
+fixture("cgt-hybrid-ed25519-bad-signature", {
+  description:
+    "The hybrid CGT with the ML-DSA-65 entry verifying and the Ed25519 entry declaring kid broker-key-1 but carrying a signature produced by broker-key-2. The post-quantum half alone MUST NOT carry the token: every declared entry verifies or the token rejects (§9.4). Verifier MUST REJECT with BAD_SIGNATURE.",
+  fixtureType: "cgt",
+  tokenForm: "general",
+  spec: [ref("§9.4 Multi-Signature Form (every declared entry MUST verify)"), ref("§8.2 Cryptographic Agility"), RFC8032, RFC9964],
+  verifierState: state(["broker-key-1", "broker-pqc-1"]),
+  expected: { verifyResult: "REJECT", rejectCategory: "BAD_SIGNATURE", reasonContains: "signature" },
+  schemaValid: true,
+  tokenGeneral: mintGeneral(
+    [{ kid: "broker-key-1", signWithKid: "broker-key-2" }, { kid: "broker-pqc-1" }],
+    cgtClaims(),
+  ),
+});
+
+fixture("cgt-hybrid-missing-ed25519", {
+  description:
+    "A general-form CGT carrying ONLY an ML-DSA-65 entry (which verifies). A general-form token that declares any ML-DSA-65 entry is on the §8.2 hybrid profile and MUST carry at least one Ed25519 entry and at least one ML-DSA-65 entry — a stripped hybrid MUST NOT degrade to single-family acceptance (§9.4). Verifier MUST REJECT with HYBRID_INCOMPLETE.",
+  fixtureType: "cgt",
+  tokenForm: "general",
+  spec: [ref("§9.4 Multi-Signature Form (hybrid family gate)"), ref("§8.2 Cryptographic Agility"), RFC9964],
+  verifierState: state(["broker-key-1", "broker-pqc-1"]),
+  expected: { verifyResult: "REJECT", rejectCategory: "HYBRID_INCOMPLETE", reasonContains: "ed25519" },
+  schemaValid: true,
+  tokenGeneral: mintGeneral([{ kid: "broker-pqc-1" }], cgtClaims()),
+});
+
+fixture("cgt-mldsa44-compact-unknown-alg", {
+  description:
+    "A compact CGT whose protected header declares alg ML-DSA-44 — registered for JOSE by RFC 9964 but absent from the AAP §9.5 registry (only ML-DSA-65 is). The signature is a real ML-DSA-65 signature over these exact bytes; the verifier MUST reject the unregistered suite at the header stage rather than downgrade or guess (§8.2). Verifier MUST REJECT with UNKNOWN_ALG.",
+  fixtureType: "cgt",
+  tokenForm: "compact",
+  spec: [ref("§9.5 Suite Registry (v1)"), ref("§8.2 Cryptographic Agility (no silent downgrade)"), RFC9964],
+  verifierState: state(["broker-pqc-1"]),
+  expected: { verifyResult: "REJECT", rejectCategory: "UNKNOWN_ALG", reasonContains: "ML-DSA-44" },
+  schemaValid: true,
+  headerSchemaValid: false,
+  token: mintCompact(
+    "broker-pqc-1",
+    { alg: "ML-DSA-44", typ: "JWT", kid: "broker-pqc-1" },
+    cgtClaims({ jti: JTI.mldsa44 }),
+  ),
+});
+
+fixture("cgt-compact-replayed", {
+  description:
+    "The spec repo's cgt-v1.jwt presented TWICE to the same verifier (presentations: 2). §8.1: receivers MUST track used jti values for the token's TTL window and MUST reject a repeated identifier. The first presentation is accepted; the expected verdict pins the second. Verifier MUST REJECT with REPLAYED_JTI.",
+  fixtureType: "cgt",
+  tokenForm: "compact",
+  spec: [ref("§8.1 Replay Prevention"), ref("§4.2 Token Structure")],
+  verifierState: state(["broker-key-1"]),
+  presentations: 2,
+  expected: { verifyResult: "REJECT", rejectCategory: "REPLAYED_JTI", reasonContains: "jti" },
+  schemaValid: true,
+  headerSchemaValid: true,
+  token: CGT_TOKEN,
 });
 
 fixture("da-compact-scope-superset", {

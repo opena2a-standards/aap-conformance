@@ -7,11 +7,13 @@ repo's deterministic generator (scripts/generate_examples.py) is the source
 of the ACCEPT token bytes, and this suite embeds them. CI checks out the
 pinned AAP ref and this script byte-compares:
 
-  - the four compact ACCEPT fixtures vs examples/tokens/{ait,cgt,da,bac}-v1.jwt
-  - the general-form ACCEPT fixture vs examples/tokens/cgt-v1.general.json
-    (structural equality of payload + signatures, the signed bytes)
-  - cgt-compact-expired, which reuses cgt-v1.jwt byte-for-byte (only the
-    pinned verifier clock differs)
+  - the five compact ACCEPT fixtures vs examples/tokens/{ait,cgt,da,bac}-v1.jwt
+    and cgt-v1.mldsa65.jwt (the RFC 9964 PQ-interop lane)
+  - the general-form ACCEPT fixtures vs examples/tokens/cgt-v1.general.json and
+    cgt-v1.hybrid.general.json (structural equality of payload + signatures,
+    the signed bytes)
+  - cgt-compact-expired and cgt-compact-replayed, which reuse cgt-v1.jwt
+    byte-for-byte (only the pinned clock / presentation count differ)
   - both DA fixtures' delegation.delegatorToken vs cgt-v1.jwt
   - vectors/test-keys.json vs examples/tokens/test-keys.json
 
@@ -47,17 +49,24 @@ def main() -> int:
         ("cgt-compact-valid", "cgt-v1.jwt"),
         ("da-compact-valid", "da-v1.jwt"),
         ("bac-compact-valid", "bac-v1.jwt"),
+        ("cgt-mldsa65-compact-valid", "cgt-v1.mldsa65.jwt"),
         ("cgt-compact-expired", "cgt-v1.jwt"),
+        ("cgt-compact-replayed", "cgt-v1.jwt"),
     ]
     for fx_name, token_file in compact_pairs:
         want = (tokens / token_file).read_text(encoding="utf-8").strip()
         check(f"{fx_name} == {token_file}", fixture(fx_name)["token"] == want)
 
-    want_general = json.loads((tokens / "cgt-v1.general.json").read_text(encoding="utf-8"))
-    check(
-        "cgt-general-valid == cgt-v1.general.json",
-        fixture("cgt-general-valid")["tokenGeneral"] == want_general,
-    )
+    general_pairs = [
+        ("cgt-general-valid", "cgt-v1.general.json"),
+        ("cgt-hybrid-general-valid", "cgt-v1.hybrid.general.json"),
+    ]
+    for fx_name, token_file in general_pairs:
+        want_general = json.loads((tokens / token_file).read_text(encoding="utf-8"))
+        check(
+            f"{fx_name} == {token_file}",
+            fixture(fx_name)["tokenGeneral"] == want_general,
+        )
 
     cgt = (tokens / "cgt-v1.jwt").read_text(encoding="utf-8").strip()
     for fx_name in ("da-compact-valid", "da-compact-scope-superset"):
