@@ -1,0 +1,51 @@
+{
+  "$schema": "https://aap.opena2a.org/schemas/fixture-v1.json",
+  "name": "aap-v1/da-compact-past-terminal-depth",
+  "description": "A DA delegated FROM a terminal delegation: the delegator token is the depth-0 DA of da-compact-terminal-depth-zero (reporting-bot, max_depth 0), and this DA delegates onward to audit-bot with act nesting the chain (act.sub reporting-bot, act.act.sub orders-reader) and max_depth 0. §5.3: max_depth is the remaining delegation depth below an assertion and 0 is terminal, so no delegation below it is permitted. Scope, trust_class and the validity window equal the delegator's; the depth is the sole defect. Verifier MUST REJECT with NOT_ATTENUATED.",
+  "fixtureType": "da",
+  "tokenForm": "compact",
+  "spec": [
+    {
+      "id": "AAP",
+      "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+      "section": "§5.3 Assertion Form (max_depth: 0 is a terminal delegation)"
+    },
+    {
+      "id": "AAP",
+      "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+      "section": "§5.4 Attenuation (checked link by link)"
+    },
+    {
+      "id": "RFC 8693",
+      "ref": "https://datatracker.ietf.org/doc/html/rfc8693",
+      "section": "§4.1 (nested act)"
+    }
+  ],
+  "verifierState": {
+    "clockNumericDate": 1780315230,
+    "keys": [
+      {
+        "kid": "broker-key-1",
+        "publicJwk": {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "ebVWLo_mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ",
+          "kid": "broker-key-1",
+          "use": "sig",
+          "alg": "EdDSA"
+        }
+      }
+    ]
+  },
+  "delegation": {
+    "delegatorToken": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImJyb2tlci1rZXktMSJ9.eyJpc3MiOiJodHRwczovL2Jyb2tlci5hY21lLmV4YW1wbGUiLCJzdWIiOiJkaWQ6b3BlbmEyYTphZ2VudDphY21lL3JlcG9ydGluZy1ib3QiLCJhdWQiOiJodHRwczovL2FwaS5vcmRlcnMuaW50ZXJuYWwiLCJzY29wZSI6Im9yZGVycy5yZWFkIiwidHJ1c3RfY2xhc3MiOiJvcmRlcnM6cmVhZCIsImlzc3Vlcl9jaGFpbiI6WyJkaWQ6b3BlbmEyYTphdXRob3JpdHk6b3BlbmEyYS5vcmciXSwidHJ1c3RfbGV2ZWwiOjQsImFjdCI6eyJzdWIiOiJkaWQ6b3BlbmEyYTphZ2VudDphY21lL29yZGVycy1yZWFkZXIifSwibWF4X2RlcHRoIjowLCJkZWxlZ2F0b3JfYXR4Ijoic2hhMjU2OjIwNTI4NzlkZGExNWIxY2E1ZTYwMzE5ZTM0NzdhNDAwODQxMmJmZmRhZjNjMzU2NmM2NTg3OTVhNDhjYWI4ZmQiLCJpYXQiOjE3ODAzMTUyMDAsImV4cCI6MTc4MDMxNTUwMCwianRpIjoiZDZlN2Y4MDkxYTJiM2M0ZDVlNmY3MDgxOTIwMzE0MjUifQ.LZoaoO7iPaYfwiITtCQrMOkCWw2jq5RC7gVQ53PqmsNNvfnbz11Q_wi5YOmZEMKsS5jgRYzmqO6FB-5NeLBIAw"
+  },
+  "expected": {
+    "verifyResult": "REJECT",
+    "rejectCategory": "NOT_ATTENUATED",
+    "reasonContains": "max_depth"
+  },
+  "schemaValid": true,
+  "headerSchemaValid": true,
+  "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImJyb2tlci1rZXktMSJ9.eyJpc3MiOiJodHRwczovL2Jyb2tlci5hY21lLmV4YW1wbGUiLCJzdWIiOiJkaWQ6b3BlbmEyYTphZ2VudDphY21lL2F1ZGl0LWJvdCIsImF1ZCI6Imh0dHBzOi8vYXBpLm9yZGVycy5pbnRlcm5hbCIsInNjb3BlIjoib3JkZXJzLnJlYWQiLCJ0cnVzdF9jbGFzcyI6Im9yZGVyczpyZWFkIiwiaXNzdWVyX2NoYWluIjpbImRpZDpvcGVuYTJhOmF1dGhvcml0eTpvcGVuYTJhLm9yZyJdLCJ0cnVzdF9sZXZlbCI6NCwiYWN0Ijp7InN1YiI6ImRpZDpvcGVuYTJhOmFnZW50OmFjbWUvcmVwb3J0aW5nLWJvdCIsImFjdCI6eyJzdWIiOiJkaWQ6b3BlbmEyYTphZ2VudDphY21lL29yZGVycy1yZWFkZXIifX0sIm1heF9kZXB0aCI6MCwiZGVsZWdhdG9yX2F0eCI6InNoYTI1NjpkZmVmZWNlMmUxOGYwOTM1MDUwZDQzZDYyMmIzYTI1NjBiNDI3YmQ0ODMzMGRhYzYzNzFkZDFmOTlmMWIwNTg0IiwiaWF0IjoxNzgwMzE1MjAwLCJleHAiOjE3ODAzMTU1MDAsImp0aSI6ImU3ZjgwOTFhMmIzYzRkNWU2ZjcwODE5MjAzMTQyNTM2In0.Lfs0vr_KQ3pcR4g6FCsjUQxwtJ0sRnmGSlS4tcLtaLxgbE9SAn3mgshEWqrvaOabJ8hlynG_L1_fF54UY5qhBg"
+}

@@ -53,8 +53,20 @@ SUITE = {
             "reason": "runtime protocol flows, not token wire form; grant-reference-v1 is validated against the broker-profile ABNF in the spec repo's own CI",
         },
         {
-            "specSection": "§8.3 intent verification and the optional CGT FGA members",
+            "specSection": "§8.3 intent verification and the optional-to-ignore CGT members (intent_verified, context_required, the deprecated fga_constraints and max_uses)",
             "reason": "optional-to-ignore per the broker profile; the v1 reference does not mint them — the schemas accept them, but no fixture pins their semantics",
+        },
+        {
+            "specSection": "§4.4 narrowing rule between authorization_details and the scope string",
+            "reason": "the mapping from an OAuth scope string to the locations and actions it permits is deployment-defined, so the intersection is not mechanical from the token alone; the suite pins the §5.4 attenuation relation, which is mechanical",
+        },
+        {
+            "specSection": "§4.6 presentation bindings other than the signed challenge (local socket peer credentials, RFC 9421 HTTP message signatures)",
+            "reason": "the OS and HTTP bindings of broker profile §6.8 are runtime channel properties; the suite models the A2A/MCP signed-challenge row deterministically and pins cnf against it",
+        },
+        {
+            "specSection": "§7.3 grant revocation list",
+            "reason": "broker runtime state (a local list checked at resolution), not token wire form",
         },
     ],
 }

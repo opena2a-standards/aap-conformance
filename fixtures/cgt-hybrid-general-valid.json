@@ -55,6 +55,10 @@
           "alg": "ML-DSA-65"
         }
       }
+    ],
+    "requiredSuites": [
+      "EdDSA",
+      "ML-DSA-65"
     ]
   },
   "expected": {
