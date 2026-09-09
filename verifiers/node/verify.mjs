@@ -33,9 +33,10 @@
 // CRIT_NOT_UNDERSTOOD. CNF_MISMATCH (§4.6 proof of possession) is judged for an
 // otherwise-valid token against the presenter proof the fixture carries.
 // NOT_ATTENUATED (§5.3/§5.4) covers the delegation members beyond the scope
-// string: trust_class, the validity window, authorization_details under the
-// narrower-than-or-equal-to relation, and max_depth (including delegating past
-// a terminal, depth-0 delegator).
+// string: trust_class, the end of the validity window (exp; the start is not
+// ordered by the spec and is bounded only by the family clock-skew bound),
+// authorization_details under the narrower-than-or-equal-to relation, and
+// max_depth (including delegating past a terminal, depth-0 delegator).
 // REPLAYED_JTI is last: replay is only decidable for an otherwise-acceptable
 // token (§8.1; a fixture presents the same token `presentations` times to one
 // verifier, and the expected verdict pins the final presentation).
@@ -826,11 +827,10 @@ function checkDelegation(claims, delegatorClaims) {
       `DA trust_class "${claims.trust_class}" is not equal to or a subset of the delegator trust_class "${delegatorClaims.trust_class}" (AAP-SPEC §5.3)`,
     );
   }
-  // §5.4: a DA carries less than its delegator — its validity window lies
-  // inside the delegator's.
-  if (claims.iat < delegatorClaims.iat) {
-    reject("NOT_ATTENUATED", `DA validity window starts (iat ${claims.iat}) before the delegator's (iat ${delegatorClaims.iat}) (AAP-SPEC §5.4)`);
-  }
+  // §5.4: a DA carries less than its delegator — it cannot outlive it, so its
+  // validity window ends no later than the delegator's. The start of the
+  // window is not ordered by the spec (it is bounded only by the family
+  // clock-skew bound) and is not checked.
   if (claims.exp > delegatorClaims.exp) {
     reject("NOT_ATTENUATED", `DA validity window ends (exp ${claims.exp}) after the delegator's (exp ${delegatorClaims.exp}) (AAP-SPEC §5.4)`);
   }

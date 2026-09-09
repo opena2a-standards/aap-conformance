@@ -14,9 +14,11 @@ pinned AAP ref and this script byte-compares:
     cgt-v1.hybrid.general.json (structural equality of payload + signatures,
     the signed bytes)
   - cgt-compact-expired and cgt-compact-replayed, which reuse cgt-v1.jwt
-    byte-for-byte (only the pinned clock / presentation count differ), and
-    cgt-compact-cnf-mismatch, which reuses cgt-v1.fgc.jwt (only the presenter
-    proof differs)
+    byte-for-byte (only the pinned clock / presentation count differ);
+    cgt-compact-cnf-mismatch and cgt-compact-cnf-no-proof, which reuse
+    cgt-v1.fgc.jwt (only the presenter proof differs or is absent); and
+    da-compact-delegator-mismatch, which reuses da-v1.fgc.jwt (only the
+    supplied delegator token differs)
   - cgt-hybrid-missing-mldsa65, whose payload and remaining Ed25519 entry are
     cgt-v1.hybrid.general.json's bytes with the ML-DSA-65 entry stripped
   - every DA fixture's delegation.delegatorToken that is a spec token
@@ -63,6 +65,8 @@ def main() -> int:
         ("da-compact-fgc-valid", "da-v1.fgc.jwt"),
         ("bac-compact-session-valid", "bac-v1.session.jwt"),
         ("cgt-compact-cnf-mismatch", "cgt-v1.fgc.jwt"),
+        ("cgt-compact-cnf-no-proof", "cgt-v1.fgc.jwt"),
+        ("da-compact-delegator-mismatch", "da-v1.fgc.jwt"),
     ]
     for fx_name, token_file in compact_pairs:
         want = (tokens / token_file).read_text(encoding="utf-8").strip()
@@ -95,6 +99,7 @@ def main() -> int:
         ("da-compact-terminal-depth-zero", "cgt-v1.jwt"),
         ("da-compact-fgc-valid", "cgt-v1.fgc.jwt"),
         ("da-compact-authorization-details-widened", "cgt-v1.fgc.jwt"),
+        ("da-compact-outlives-delegator", "cgt-v1.fgc.jwt"),
     ]
     for fx_name, token_file in delegator_pairs:
         want = (tokens / token_file).read_text(encoding="utf-8").strip()

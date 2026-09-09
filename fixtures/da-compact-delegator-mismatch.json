@@ -1,0 +1,66 @@
+{
+  "$schema": "https://aap.opena2a.org/schemas/fixture-v1.json",
+  "name": "aap-v1/da-compact-delegator-mismatch",
+  "description": "The spec repo's da-v1.fgc.jwt unchanged (act.sub orders-reader), presented with a delegator token that is NOT its delegator: a CGT minted here for audit-bot carrying the same scope, trust_class and authorization_details as the §4.7 grant. §5.3 defines act as the delegating agent ({sub: delegator DID}) and §5.4 checks each DA against its immediate delegator, so a supplied token whose sub is not the DA's act.sub is not that delegator and re-checks nothing. Both tokens carry valid signatures and schema-valid claims, the presenter proof (agent-key-2) is valid, and every attenuation member would pass against this grant; the linkage is the sole defect. Verifier MUST REJECT with DELEGATOR_INVALID.",
+  "fixtureType": "da",
+  "tokenForm": "compact",
+  "spec": [
+    {
+      "id": "AAP",
+      "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+      "section": "§5.3 Assertion Form (act: the delegating agent)"
+    },
+    {
+      "id": "AAP",
+      "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+      "section": "§5.4 Attenuation (each DA against its immediate delegator)"
+    },
+    {
+      "id": "RFC 8693",
+      "ref": "https://datatracker.ietf.org/doc/html/rfc8693",
+      "section": "§4.1 (act)"
+    }
+  ],
+  "verifierState": {
+    "clockNumericDate": 1780315230,
+    "keys": [
+      {
+        "kid": "broker-key-1",
+        "publicJwk": {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "ebVWLo_mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ",
+          "kid": "broker-key-1",
+          "use": "sig",
+          "alg": "EdDSA"
+        }
+      }
+    ]
+  },
+  "delegation": {
+    "delegatorToken": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImJyb2tlci1rZXktMSJ9.eyJpc3MiOiJodHRwczovL2Jyb2tlci5hY21lLmV4YW1wbGUiLCJzdWIiOiJkaWQ6b3BlbmEyYTphZ2VudDphY21lL2F1ZGl0LWJvdCIsImF1ZCI6Imh0dHBzOi8vYXBpLm9yZGVycy5pbnRlcm5hbCIsInNjb3BlIjoib3JkZXJzLnJlYWQiLCJ0cnVzdF9jbGFzcyI6Im9yZGVyczpyZWFkIiwiaXNzdWVyX2NoYWluIjpbImRpZDpvcGVuYTJhOmF1dGhvcml0eTpvcGVuYTJhLm9yZyJdLCJ0cnVzdF9sZXZlbCI6NCwiYXV0aG9yaXphdGlvbl9kZXRhaWxzIjpbeyJ0eXBlIjoiaHR0cHM6Ly9zcGVjcy5vcGVuYTJhLm9yZy9hYXAvdHlwZXMvZGF0YSIsImxvY2F0aW9ucyI6WyJodHRwczovL2FwaS5vcmRlcnMuaW50ZXJuYWwvb3JkZXJzIl0sImFjdGlvbnMiOlsicmVhZCJdLCJmaWVsZHNBbGxvd2VkIjpbImlkIiwic3RhdHVzIiwidG90YWwiXSwiZmllbGRzRGVuaWVkIjpbImN1c3RvbWVyLmVtYWlsIl0sImxhYmVsQ2VpbGluZyI6WyJpbnRlcm5hbCJdfSx7InR5cGUiOiJodHRwczovL3NwZWNzLm9wZW5hMmEub3JnL2FhcC90eXBlcy9idWRnZXQiLCJtYXhVc2VzIjoxMDAsInJhdGUiOnsibWF4Ijo2MCwid2luZG93U2Vjb25kcyI6NjB9fV0sImFhcF9jcml0IjpbImF1dGhvcml6YXRpb25fZGV0YWlscyIsImNuZiJdLCJjbmYiOnsiamt0IjoiSGxIZ0NjanJoYmV5dzgwVk1lZjUxeVB3aHlScWppd0xkd1NMUnFvN2hTSSJ9LCJpYXQiOjE3ODAzMTUyMDAsImV4cCI6MTc4MDMxNTUwMCwianRpIjoiMDkxYTJiM2M0ZDVlNmY3MDgxOTIwMzE0MjUzNjQ3NTgifQ.qCUR5eZ6S4bmOnnSAbTmAKZVPU6dWYuA5fARXF7SQbUuWVOtx5zivFodg6RDyidVxPB2JBkjpcDsTJ1qLesoBg"
+  },
+  "presentation": {
+    "proof": {
+      "binding": "signed-challenge",
+      "challenge": "c9NnderUm1i_ywSTovIv-Vmd2bWUk5VMjt3YNwcVhPk",
+      "jwk": {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "zRSzf5VulTGU_3-3Oz2B3MVh1hp1OAlLfD4aZD7l86o",
+        "kid": "agent-key-2",
+        "use": "sig",
+        "alg": "EdDSA"
+      },
+      "signature": "RivQhfmJUYkrAnUVPqW7H43Xlh0zuZkw7fi1YGXMopyYpRQxuSeghb8MuE4fipwCuwMDcne7Qz_-Y_X1n1TxBw"
+    }
+  },
+  "expected": {
+    "verifyResult": "REJECT",
+    "rejectCategory": "DELEGATOR_INVALID",
+    "reasonContains": "act.sub"
+  },
+  "schemaValid": true,
+  "headerSchemaValid": true,
+  "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImJyb2tlci1rZXktMSJ9.eyJpc3MiOiJodHRwczovL2Jyb2tlci5hY21lLmV4YW1wbGUiLCJzdWIiOiJkaWQ6b3BlbmEyYTphZ2VudDphY21lL3JlcG9ydGluZy1ib3QiLCJhdWQiOiJodHRwczovL2FwaS5vcmRlcnMuaW50ZXJuYWwiLCJzY29wZSI6Im9yZGVycy5yZWFkIiwidHJ1c3RfY2xhc3MiOiJvcmRlcnM6cmVhZCIsImlzc3Vlcl9jaGFpbiI6WyJkaWQ6b3BlbmEyYTphdXRob3JpdHk6b3BlbmEyYS5vcmciXSwidHJ1c3RfbGV2ZWwiOjQsImF1dGhvcml6YXRpb25fZGV0YWlscyI6W3sidHlwZSI6Imh0dHBzOi8vc3BlY3Mub3BlbmEyYS5vcmcvYWFwL3R5cGVzL2RhdGEiLCJsb2NhdGlvbnMiOlsiaHR0cHM6Ly9hcGkub3JkZXJzLmludGVybmFsL29yZGVycyJdLCJhY3Rpb25zIjpbInJlYWQiXSwiZmllbGRzQWxsb3dlZCI6WyJpZCIsInN0YXR1cyJdLCJmaWVsZHNEZW5pZWQiOlsiY3VzdG9tZXIuZW1haWwiXSwibGFiZWxDZWlsaW5nIjpbImludGVybmFsIl19LHsidHlwZSI6Imh0dHBzOi8vc3BlY3Mub3BlbmEyYS5vcmcvYWFwL3R5cGVzL2J1ZGdldCIsIm1heFVzZXMiOjEwLCJyYXRlIjp7Im1heCI6MTAsIndpbmRvd1NlY29uZHMiOjYwfX1dLCJhYXBfY3JpdCI6WyJhdXRob3JpemF0aW9uX2RldGFpbHMiLCJjbmYiXSwiY25mIjp7ImprdCI6InFJX19CT2NjZ0FoaEg5d29iX0c3Z0ZWSExLSWtTNEN1dHZvU3gwYk1DWTgifSwiYWN0Ijp7InN1YiI6ImRpZDpvcGVuYTJhOmFnZW50OmFjbWUvb3JkZXJzLXJlYWRlciJ9LCJtYXhfZGVwdGgiOjEsImRlbGVnYXRvcl9hdHgiOiJzaGEyNTY6MjA1Mjg3OWRkYTE1YjFjYTVlNjAzMTllMzQ3N2E0MDA4NDEyYmZmZGFmM2MzNTY2YzY1ODc5NWE0OGNhYjhmZCIsImlhdCI6MTc4MDMxNTIwMCwiZXhwIjoxNzgwMzE1NTAwLCJqdGkiOiJkNGU1ZjZhN2I4YzkwMTJiM2M0ZDVlNmY3MDgxOTIwMyJ9.ev6VUDi_6jUaaDfbY3SEARDVbpVuhk7Z0ptsGD7Edv3JyPap8mK4faaSDJeNw9yJI2SEaZf0vO588wgV3WekCQ"
+}

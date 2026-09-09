@@ -61,12 +61,28 @@ SUITE = {
             "reason": "the mapping from an OAuth scope string to the locations and actions it permits is deployment-defined, so the intersection is not mechanical from the token alone; the suite pins the §5.4 attenuation relation, which is mechanical",
         },
         {
-            "specSection": "§4.6 presentation bindings other than the signed challenge (local socket peer credentials, RFC 9421 HTTP message signatures)",
-            "reason": "the OS and HTTP bindings of broker profile §6.8 are runtime channel properties; the suite models the A2A/MCP signed-challenge row deterministically and pins cnf against it",
+            "specSection": "§4.6 presentation bindings other than the signed challenge (local socket peer credentials, RFC 9421 HTTP message signatures), and the channel properties of the signed challenge itself",
+            "reason": "the OS and HTTP bindings of broker profile §6.8 are runtime channel properties; the suite models the A2A/MCP signed-challenge row deterministically and pins cnf against it (key binding by RFC 7638 thumbprint and the signature over the challenge); channel binding, freshness and single use of the challenge are broker state and not exercised",
         },
         {
             "specSection": "§7.3 grant revocation list",
             "reason": "broker runtime state (a local list checked at resolution), not token wire form",
+        },
+        {
+            "specSection": "§4.5 producer rule: aap_crit MUST NOT name a §4.2 baseline claim",
+            "reason": "a producer MUST NOT with no verifier MUST; the verifiers reject such a name only as a name they do not implement, and no fixture pins the producer rule",
+        },
+        {
+            "specSection": "§5.4 a DA that omits authorization_details while its delegator carries some",
+            "reason": "the spec's mechanical text quantifies over the entries a DA carries and is vacuous over an absent claim, so the verifiers pass it; §4.4 reads a token without the claim as an unconstrained baseline token, which would carry more than the delegator's grant — a spec text gap, pending a spec sentence before a fixture pins it",
+        },
+        {
+            "specSection": "§5.4 member kinds and §4.4.1 entry types no fixture exercises (identity, deny set, bound incl. spend/rate/tokenCap, restriction flags, constraint objects; mcp_tool, skill, peer_agent, model, network incl. *. destination coverage)",
+            "reason": "implemented in both verifiers, not pinned; what IS exercised is the allow set member kind on a data entry (fieldsAllowed, rejected when widened), the §5.5 data and budget entries accepted as narrower than the §4.7 grant, and max_depth",
+        },
+        {
+            "specSection": "§5.4 start-of-window ordering (DA iat vs delegator iat)",
+            "reason": "not stated by the spec; bounded only by the family clock-skew bound (ATP §10.2 via broker profile §6 step 2), so it is not a verifier rule here — only the end of the window (exp) is checked and pinned",
         },
     ],
 }

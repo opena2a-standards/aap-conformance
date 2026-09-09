@@ -141,6 +141,10 @@ const JTI = {
   daWidened: "c5d6e7f8091a2b3c4d5e6f7081920314",
   daTerminal: "d6e7f8091a2b3c4d5e6f708192031425",
   daPastTerminal: "e7f8091a2b3c4d5e6f70819203142536",
+  daOutlives: "f8091a2b3c4d5e6f7081920314253647",
+  cgtAuditBot: "091a2b3c4d5e6f708192031425364758",
+  critNamesAbsent: "1a2b3c4d5e6f70819203142536475869",
+  critEmpty: "2b3c4d5e6f7081920314253647586970",
 };
 
 // AAP-SPEC §4.4.1: entry `type` values are URIs under the family prefix.
@@ -1033,6 +1037,93 @@ fixture("da-compact-past-terminal-depth", {
       jti: JTI.daPastTerminal,
     }),
   ),
+});
+
+fixture("da-compact-outlives-delegator", {
+  description:
+    "The §5.5 DA claim set with exp = iat + 600, later than the delegator's exp = iat + 300 (the §4.7 grant, carried as the delegator token). §5.4: a DA can only carry less than the delegator's grant, and iat/exp are the token's validity window (§4.2), so a DA that outlives its delegator carries authority after the delegator's has lapsed. The pinned clock (iat + 30) is inside both windows, the signature, the presenter proof (agent-key-2), scope, trust_class, authorization_details and max_depth are all valid; the later exp is the sole defect. Verifier MUST REJECT with NOT_ATTENUATED.",
+  fixtureType: "da",
+  tokenForm: "compact",
+  spec: [ref("§5.4 Attenuation (a DA carries less than the delegator's grant)"), ref("§4.2 Token Structure (iat/exp: the validity window)"), ref("§5.3 Assertion Form")],
+  verifierState: state(["broker-key-1"]),
+  delegation: { delegatorToken: CGT_FGC_TOKEN },
+  presentation: presenterProof("agent-key-2", JTI.daOutlives),
+  expected: { verifyResult: "REJECT", rejectCategory: "NOT_ATTENUATED", reasonContains: "exp" },
+  schemaValid: true,
+  headerSchemaValid: true,
+  token: mintCompact(
+    "broker-key-1",
+    compactHeader("broker-key-1"),
+    daFgcClaims({ exp: IAT + 600, jti: JTI.daOutlives }),
+  ),
+});
+
+fixture("da-compact-delegator-mismatch", {
+  description:
+    "The spec repo's da-v1.fgc.jwt unchanged (act.sub orders-reader), presented with a delegator token that is NOT its delegator: a CGT minted here for audit-bot carrying the same scope, trust_class and authorization_details as the §4.7 grant. §5.3 defines act as the delegating agent ({sub: delegator DID}) and §5.4 checks each DA against its immediate delegator, so a supplied token whose sub is not the DA's act.sub is not that delegator and re-checks nothing. Both tokens carry valid signatures and schema-valid claims, the presenter proof (agent-key-2) is valid, and every attenuation member would pass against this grant; the linkage is the sole defect. Verifier MUST REJECT with DELEGATOR_INVALID.",
+  fixtureType: "da",
+  tokenForm: "compact",
+  spec: [ref("§5.3 Assertion Form (act: the delegating agent)"), ref("§5.4 Attenuation (each DA against its immediate delegator)"), { id: "RFC 8693", ref: "https://datatracker.ietf.org/doc/html/rfc8693", section: "§4.1 (act)" }],
+  verifierState: state(["broker-key-1"]),
+  delegation: {
+    delegatorToken: mintCompact(
+      "broker-key-1",
+      compactHeader("broker-key-1"),
+      cgtFgcClaims({ sub: AUDIT_BOT_DID, jti: JTI.cgtAuditBot }),
+    ),
+  },
+  presentation: presenterProof("agent-key-2", JTI.daFgc),
+  expected: { verifyResult: "REJECT", rejectCategory: "DELEGATOR_INVALID", reasonContains: "act.sub" },
+  schemaValid: true,
+  headerSchemaValid: true,
+  token: DA_FGC_TOKEN,
+});
+
+fixture("cgt-compact-crit-names-absent-claim", {
+  description:
+    "The §4.7 CGT claim set without cnf, while aap_crit still names authorization_details and cnf. §4.5: a verifier MUST reject a token whose aap_crit names a claim that is not present in the token (the vendored schema marks this a verifier check, so the claim set is schema-valid). No presentation is carried because the token binds no presenter. The signature and every other member are valid; the absent named claim is the sole defect. Verifier MUST REJECT with CRIT_NOT_UNDERSTOOD.",
+  fixtureType: "cgt",
+  tokenForm: "compact",
+  spec: [ref("§4.5 Mandatory to understand claims (aap_crit MUST NOT name an absent claim)")],
+  verifierState: state(["broker-key-1"]),
+  expected: { verifyResult: "REJECT", rejectCategory: "CRIT_NOT_UNDERSTOOD", reasonContains: "no such claim" },
+  schemaValid: true,
+  headerSchemaValid: true,
+  token: (() => {
+    const claims = cgtFgcClaims({ jti: JTI.critNamesAbsent });
+    delete claims.cnf;
+    return mintCompact("broker-key-1", compactHeader("broker-key-1"), claims);
+  })(),
+});
+
+fixture("cgt-compact-crit-empty", {
+  description:
+    "The §4.2 baseline CGT claim set plus aap_crit: [] and nothing else. §4.5: a verifier MUST reject a token whose aap_crit is present but empty; the vendored cgt-claims-v1 schema pins it as minItems 1, so the claim set is schema-invalid. The signature is valid; the empty array is the sole defect. Verifier MUST REJECT with CLAIM_SCHEMA.",
+  fixtureType: "cgt",
+  tokenForm: "compact",
+  spec: [ref("§4.5 Mandatory to understand claims (aap_crit present but empty)"), ref("§4.2 Token Structure")],
+  verifierState: state(["broker-key-1"]),
+  expected: { verifyResult: "REJECT", rejectCategory: "CLAIM_SCHEMA", reasonContains: "aap_crit" },
+  schemaValid: false,
+  headerSchemaValid: true,
+  token: (() => {
+    // aap_crit sits where the 0.5 members sit (§4.7): before the validity window.
+    const { iat, exp, jti, ...head } = cgtClaims({ jti: JTI.critEmpty });
+    return mintCompact("broker-key-1", compactHeader("broker-key-1"), { ...head, aap_crit: [], iat, exp, jti });
+  })(),
+});
+
+fixture("cgt-compact-cnf-no-proof", {
+  description:
+    "Byte-identical to cgt-compact-fgc-valid (the spec repo's cgt-v1.fgc.jwt, cnf bound to agent-key-1) presented with NO presenter proof (no presentation member). §4.6: a verifier that receives a token with cnf MUST verify the presenter's proof against the bound key and MUST reject the token otherwise — a verifier that treats a missing proof as nothing to verify accepts the token as a bearer token, the downgrade §4.5 lists cnf to prevent. The token signature is valid; the absent proof is the sole defect. Verifier MUST REJECT with CNF_MISMATCH.",
+  fixtureType: "cgt",
+  tokenForm: "compact",
+  spec: [ref("§4.6 Proof of possession (MUST reject the token otherwise)"), ref("§8.6 Presentation is not possession"), BROKER_PROFILE_6_8, RFC7800],
+  verifierState: state(["broker-key-1"]),
+  expected: { verifyResult: "REJECT", rejectCategory: "CNF_MISMATCH", reasonContains: "proof" },
+  schemaValid: true,
+  headerSchemaValid: true,
+  token: CGT_FGC_TOKEN,
 });
 
 fixture("cgt-hybrid-missing-mldsa65", {
