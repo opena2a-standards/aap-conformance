@@ -38,6 +38,12 @@
     "intent_verified": {
       "type": "boolean"
     },
+    "session_label": {
+      "type": "array",
+      "uniqueItems": true,
+      "description": "AAP-SPEC 0.5 section 6.4: the set of labels admitted into the session so far (the broker's session high water mark). L3 only; a broker that maintains the high water mark for a session under a data grant MUST include it. Sets, not levels. Absent on L1 and L2 (a verifier check; the schema pins form).",
+      "items": { "type": "string", "minLength": 1 }
+    },
     "iat": {
       "type": "integer",
       "minimum": 0
@@ -70,6 +76,14 @@
       },
       "then": {
         "required": ["binary_hash", "drift_score", "anomaly_state", "intent_verified"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "bac_level": { "enum": [1, 2] } }
+      },
+      "then": {
+        "not": { "required": ["session_label"] }
       }
     }
   ]

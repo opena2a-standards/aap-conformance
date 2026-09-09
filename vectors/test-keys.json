@@ -47,6 +47,34 @@
         "use": "sig",
         "alg": "ML-DSA-65"
       }
+    },
+    {
+      "kid": "agent-key-1",
+      "role": "presenter",
+      "ed25519SeedHex": "606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f",
+      "publicJwk": {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "F0VTtFbd38aQjsqxwQH-arIeK6oGF3lbfUOmNIKZP9U",
+        "kid": "agent-key-1",
+        "use": "sig",
+        "alg": "EdDSA"
+      },
+      "jkt": "HlHgCcjrhbeyw80VMef51yPwhyRqjiwLdwSLRqo7hSI"
+    },
+    {
+      "kid": "agent-key-2",
+      "role": "presenter",
+      "ed25519SeedHex": "808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f",
+      "publicJwk": {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "zRSzf5VulTGU_3-3Oz2B3MVh1hp1OAlLfD4aZD7l86o",
+        "kid": "agent-key-2",
+        "use": "sig",
+        "alg": "EdDSA"
+      },
+      "jkt": "qI__BOccgAhhH9wob_G7gFVHLKIkS4CutvoSx0bMCY8"
     }
   ]
 }

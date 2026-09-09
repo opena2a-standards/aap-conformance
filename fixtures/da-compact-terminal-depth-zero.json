@@ -1,0 +1,44 @@
+{
+  "$schema": "https://aap.opena2a.org/schemas/fixture-v1.json",
+  "name": "aap-v1/da-compact-terminal-depth-zero",
+  "description": "A DA with max_depth 0 — a terminal delegation (§5.3: max_depth is an integer >= 0 and 0 is expressible; the 0.5 da-claims-v1 schema lowers the floor from 1 to 0). Delegator is the spec repo's cgt-v1.jwt; scope and trust_class are equal and the validity window is the delegator's. Minted here (the spec repo publishes no depth-0 example). A verifier that still floors max_depth at 1 wrongly rejects it. Verifier MUST ACCEPT.",
+  "fixtureType": "da",
+  "tokenForm": "compact",
+  "spec": [
+    {
+      "id": "AAP",
+      "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+      "section": "§5.3 Assertion Form (max_depth >= 0; 0 is a terminal delegation)"
+    },
+    {
+      "id": "AAP",
+      "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+      "section": "§5.2 Constraints"
+    }
+  ],
+  "verifierState": {
+    "clockNumericDate": 1780315230,
+    "keys": [
+      {
+        "kid": "broker-key-1",
+        "publicJwk": {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "ebVWLo_mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ",
+          "kid": "broker-key-1",
+          "use": "sig",
+          "alg": "EdDSA"
+        }
+      }
+    ]
+  },
+  "delegation": {
+    "delegatorToken": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImJyb2tlci1rZXktMSJ9.eyJpc3MiOiJodHRwczovL2Jyb2tlci5hY21lLmV4YW1wbGUiLCJzdWIiOiJkaWQ6b3BlbmEyYTphZ2VudDphY21lL29yZGVycy1yZWFkZXIiLCJhdWQiOiJodHRwczovL2FwaS5vcmRlcnMuaW50ZXJuYWwiLCJzY29wZSI6Im9yZGVycy5yZWFkIiwidHJ1c3RfY2xhc3MiOiJvcmRlcnM6cmVhZCIsImlzc3Vlcl9jaGFpbiI6WyJkaWQ6b3BlbmEyYTphdXRob3JpdHk6b3BlbmEyYS5vcmciXSwidHJ1c3RfbGV2ZWwiOjQsImlhdCI6MTc4MDMxNTIwMCwiZXhwIjoxNzgwMzE1NTAwLCJqdGkiOiI5ZjhlN2Q2YzViNGEzOTI4MTcwNmY1ZTRkM2MyYjFhMCJ9.7zmUIjgHLztQBSxtz38bKM5_lvta8WshMA_e6zRdW4_MhUb7fw1A5dAQMAWOJUKZklBFmdJf_vfoL0_0B-eJBA"
+  },
+  "expected": {
+    "verifyResult": "ACCEPT"
+  },
+  "schemaValid": true,
+  "headerSchemaValid": true,
+  "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImJyb2tlci1rZXktMSJ9.eyJpc3MiOiJodHRwczovL2Jyb2tlci5hY21lLmV4YW1wbGUiLCJzdWIiOiJkaWQ6b3BlbmEyYTphZ2VudDphY21lL3JlcG9ydGluZy1ib3QiLCJhdWQiOiJodHRwczovL2FwaS5vcmRlcnMuaW50ZXJuYWwiLCJzY29wZSI6Im9yZGVycy5yZWFkIiwidHJ1c3RfY2xhc3MiOiJvcmRlcnM6cmVhZCIsImlzc3Vlcl9jaGFpbiI6WyJkaWQ6b3BlbmEyYTphdXRob3JpdHk6b3BlbmEyYS5vcmciXSwidHJ1c3RfbGV2ZWwiOjQsImFjdCI6eyJzdWIiOiJkaWQ6b3BlbmEyYTphZ2VudDphY21lL29yZGVycy1yZWFkZXIifSwibWF4X2RlcHRoIjowLCJkZWxlZ2F0b3JfYXR4Ijoic2hhMjU2OjIwNTI4NzlkZGExNWIxY2E1ZTYwMzE5ZTM0NzdhNDAwODQxMmJmZmRhZjNjMzU2NmM2NTg3OTVhNDhjYWI4ZmQiLCJpYXQiOjE3ODAzMTUyMDAsImV4cCI6MTc4MDMxNTUwMCwianRpIjoiZDZlN2Y4MDkxYTJiM2M0ZDVlNmY3MDgxOTIwMzE0MjUifQ.LZoaoO7iPaYfwiITtCQrMOkCWw2jq5RC7gVQ53PqmsNNvfnbz11Q_wi5YOmZEMKsS5jgRYzmqO6FB-5NeLBIAw"
+}

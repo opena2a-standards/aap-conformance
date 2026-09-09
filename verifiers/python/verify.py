@@ -15,15 +15,37 @@ discover the same defect first:
 
     MALFORMED_TOKEN > MALFORMED_HEADER > UNKNOWN_HEADER_PARAM > UNKNOWN_ALG >
     UNKNOWN_KEY > BAD_SIGNATURE > HYBRID_INCOMPLETE > MALFORMED_PAYLOAD >
-    CLAIM_SCHEMA > EXPIRED > TTL_WINDOW > (DELEGATOR_INVALID >)
-    SCOPE_NOT_SUBSET > REPLAYED_JTI
+    CLAIM_SCHEMA > CRIT_UNLISTED > CRIT_NOT_UNDERSTOOD > EXPIRED > TTL_WINDOW >
+    CNF_MISMATCH > (DELEGATOR_INVALID >) SCOPE_NOT_SUBSET > NOT_ATTENUATED >
+    REPLAYED_JTI
 
 HYBRID_INCOMPLETE sits after BAD_SIGNATURE: the family gate (AAP-SPEC §9.4:
-a general-form token declaring any ML-DSA-65 entry MUST carry ≥1 Ed25519
-AND ≥1 ML-DSA-65 entry) is judged only once every declared entry verifies.
+every declared entry verifies; a general-form token declaring any ML-DSA-65
+entry MUST carry ≥1 Ed25519 AND ≥1 ML-DSA-65 entry; a suite the verifier's
+path policy requires — verifierState.requiredSuites, §8.2 — MUST be present,
+so a stripped declared entry cannot degrade the token) is judged only once
+every declared entry verifies.
+CRIT_UNLISTED / CRIT_NOT_UNDERSTOOD (§4.5 mandatory-to-understand claims)
+follow the claim-form checks: a mandatory-to-understand claim that is present
+but not named in aap_crit is CRIT_UNLISTED; an aap_crit name this verifier
+does not implement, a name naming no claim in the token, or an
+authorization_details entry type outside the §4.4.1 registry is
+CRIT_NOT_UNDERSTOOD. CNF_MISMATCH (§4.6 proof of possession) is judged for an
+otherwise-valid token against the presenter proof the fixture carries.
+NOT_ATTENUATED (§5.3/§5.4) covers the delegation members beyond the scope
+string: trust_class, the end of the validity window (exp; the start is not
+ordered by the spec and is bounded only by the family clock-skew bound),
+authorization_details under the narrower-than-or-equal-to relation, and
+max_depth (including delegating past a terminal, depth-0 delegator).
 REPLAYED_JTI is last: replay is only decidable for an otherwise-acceptable
 token (§8.1; a fixture presents the same token `presentations` times to one
 verifier, and the expected verdict pins the final presentation).
+
+Fixture inputs beyond the token: verifierState.keys (trusted signing keys),
+verifierState.clockNumericDate, verifierState.requiredSuites (path policy,
+general form), delegation.delegatorToken (the immediate delegator's CGT or
+DA, for the §5.3/§5.4 re-check), presentation.proof (the presenter's
+signed-challenge proof for cnf: broker profile §6.8, A2A/MCP row).
 
 Parsing rules (AAP-SPEC §9.2, and the atx-conformance duplicate-key lesson):
   - the protected header is STRICT-parsed: duplicate members at any depth
@@ -40,6 +62,7 @@ when pinned) is met, else 1.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import re
 import sys
@@ -60,6 +83,36 @@ SHA256_REF_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 # RFC 9964). ML-DSA-44/87, though JOSE-registered, are NOT in the AAP registry.
 SUITE_REGISTRY = ("EdDSA", "ML-DSA-65")
 BAC_TTL_SECONDS = 60  # AAP-SPEC §6.1
+
+# AAP-SPEC §4.4.1: the wire value of an authorization_details entry `type` is
+# the registry URI; the short name is the registry key.
+TYPE_URI_PREFIX = "https://specs.opena2a.org/aap/types/"
+TYPE_URI_RE = re.compile(r"^https://specs\.opena2a\.org/aap/types/[a-z_]+$")
+# RFC 7638 thumbprint as registered for cnf by RFC 9449 §6.1 (43 base64url chars).
+JKT_RE = re.compile(r"^[A-Za-z0-9_-]{43}$")
+DECIMAL_RE = re.compile(r"^[0-9]+(\.[0-9]+)?$")
+CURRENCY_RE = re.compile(r"^[A-Z]{3}$")
+# The claims this verifier implements as mandatory-to-understand (§4.5). Any
+# other name in aap_crit is not understood and rejects the token.
+UNDERSTOOD_CRIT = ("authorization_details", "cnf")
+# §4.4.1 entry type registry: short name -> members that are MUST for the type.
+# budget is MUST-one-of (BUDGET_MEMBERS) and is checked separately.
+ENTRY_TYPES: dict[str, tuple[str, ...]] = {
+    "mcp_tool": ("serverId", "tools"),
+    "skill": ("identifier", "version", "contentHash"),
+    "peer_agent": ("peerDid", "direction", "subDelegationDepth"),
+    "model": ("endpoint",),
+    "network": ("destinations", "tlsRequired"),
+    "data": ("locations", "actions"),
+    "budget": (),
+}
+BUDGET_MEMBERS = ("spend", "rate", "maxUses", "concurrency", "tokenCap")
+# §5.4 member kinds of the narrower-than-or-equal-to relation.
+IDENTITY_MEMBERS = ("serverId", "serverAtx", "identifier", "version", "contentHash", "schemaHash", "peerDid", "endpoint")
+ALLOW_SET_MEMBERS = ("locations", "actions", "datatypes", "privileges", "tools", "models", "destinations", "direction", "fieldsAllowed", "labelCeiling", "egressCeiling")
+CEILING_MEMBERS = ("labelCeiling", "egressCeiling")  # absent means the empty set
+DENY_SET_MEMBERS = ("fieldsDenied",)
+FLAG_MEMBERS = ("tlsRequired", "requiresApproval")
 
 
 # --- reject plumbing -----------------------------------------------------------
@@ -253,8 +306,128 @@ CHECKS: dict[str, tuple[Callable[[Any], bool], str]] = {
     "driftScore": (lambda v: _is_num(v) and 0 <= v <= 1, "must be a number in 0..1"),
     "bool": (lambda v: isinstance(v, bool), "must be a boolean"),
     "posInt": (lambda v: _is_int(v) and v >= 1, "must be an integer >= 1"),
+    "nonNegInt": (
+        lambda v: _is_int(v) and v >= 0,
+        "must be an integer >= 0 (0 is a terminal delegation, AAP-SPEC §5.3)",
+    ),
     "actor": (_check_actor, 'must be an object with a DID "sub" (recursively)'),
+    "authorizationDetails": (
+        lambda v: _check_authorization_details_form(v),
+        "must be a non-empty array of entries, each an object whose type is a §4.4.1 registry URI with well-formed members",
+    ),
+    "aapCrit": (
+        lambda v: isinstance(v, list) and len(v) >= 1 and all(_nonempty(x) for x in v) and len(set(v)) == len(v),
+        "must be a non-empty array of unique claim names (AAP-SPEC §4.5)",
+    ),
+    "cnf": (
+        lambda v: _check_cnf_form(v),
+        "must be an object carrying exactly one of jwk or jkt (RFC 7800, AAP-SPEC §4.6)",
+    ),
+    "labelSet": (
+        lambda v: _is_uniq_str_arr(v),
+        "must be an array of unique non-empty strings (a label set, AAP-SPEC §4.4.2)",
+    ),
 }
+
+
+def _is_str_arr(v: Any) -> bool:
+    return isinstance(v, list) and all(_nonempty(x) for x in v)
+
+
+def _is_uniq_str_arr(v: Any) -> bool:
+    return _is_str_arr(v) and len(set(v)) == len(v)
+
+
+def _is_sha256_ref(v: Any) -> bool:
+    return isinstance(v, str) and bool(SHA256_REF_RE.match(v))
+
+
+def _pos_int(v: Any) -> bool:
+    return _is_int(v) and v >= 1
+
+
+def _non_neg_int(v: Any) -> bool:
+    return _is_int(v) and v >= 0
+
+
+def _check_cnf_form(v: Any) -> bool:
+    if not _is_plain_object(v) or (("jwk" in v) == ("jkt" in v)):
+        return False
+    if "jwk" in v and not (_is_plain_object(v["jwk"]) and _nonempty(v["jwk"].get("kty"))):
+        return False
+    if "jkt" in v and not (isinstance(v["jkt"], str) and JKT_RE.match(v["jkt"])):
+        return False
+    return True
+
+
+# Member forms of the §4.4.1 table. Members are checked whatever the entry
+# type (the table's spelling is unique per member); members the table does not
+# name are ignored, and unknown types are judged by the aap_crit rule, not here.
+ENTRY_MEMBER_FORMS: dict[str, Callable[[Any], bool]] = {
+    "serverId": _nonempty,
+    "serverAtx": _is_sha256_ref,
+    "tools": _is_str_arr,
+    "argumentConstraints": lambda v: _is_plain_object(v) and all(_is_plain_object(x) for x in v.values()),
+    "schemaHash": _is_sha256_ref,
+    "identifier": _nonempty,
+    "version": _nonempty,
+    "contentHash": _is_sha256_ref,
+    "peerDid": _is_did,
+    "direction": lambda v: _is_uniq_str_arr(v) and len(v) >= 1 and all(d in ("outbound", "inbound") for d in v),
+    "subDelegationDepth": _non_neg_int,
+    "endpoint": _nonempty,
+    "models": _is_str_arr,
+    "destinations": _is_str_arr,
+    "tlsRequired": lambda v: isinstance(v, bool),
+    "locations": _is_str_arr,
+    "actions": _is_str_arr,
+    "datatypes": _is_str_arr,
+    "privileges": _is_str_arr,
+    "fieldsAllowed": _is_str_arr,
+    "fieldsDenied": _is_str_arr,
+    "labelCeiling": _is_uniq_str_arr,
+    "egressCeiling": _is_uniq_str_arr,
+    "spend": lambda v: (
+        _is_plain_object(v)
+        and isinstance(v.get("amount"), str)
+        and bool(DECIMAL_RE.match(v["amount"]))
+        and isinstance(v.get("currency"), str)
+        and bool(CURRENCY_RE.match(v["currency"]))
+    ),
+    "rate": lambda v: _is_plain_object(v) and _pos_int(v.get("max")) and _pos_int(v.get("windowSeconds")),
+    "maxUses": _pos_int,
+    "concurrency": _pos_int,
+    "tokenCap": lambda v: (
+        _is_plain_object(v)
+        and ("input" not in v or _non_neg_int(v["input"]))
+        and ("output" not in v or _non_neg_int(v["output"]))
+    ),
+    "requiresApproval": lambda v: isinstance(v, bool),
+}
+
+
+def _check_authorization_details_form(v: Any) -> bool:
+    """Form of the authorization_details claim (the vendored schema's shape plus
+    the §4.4.1 member forms for types this verifier implements). False on the
+    first malformed entry; an unknown type passes here and is rejected by
+    check_crit as not understood."""
+    if not isinstance(v, list) or len(v) == 0:
+        return False
+    for entry in v:
+        if not _is_plain_object(entry) or not isinstance(entry.get("type"), str) or not TYPE_URI_RE.match(entry["type"]):
+            return False
+        for member, form in ENTRY_MEMBER_FORMS.items():
+            if member in entry and not form(entry[member]):
+                return False
+        short_name = entry["type"][len(TYPE_URI_PREFIX):]
+        required = ENTRY_TYPES.get(short_name)
+        if required is None:
+            continue
+        if not all(m in entry for m in required):
+            return False
+        if short_name == "budget" and not any(m in entry for m in BUDGET_MEMBERS):
+            return False
+    return True
 
 CGT_MEMBERS: list[tuple[str, str, bool]] = [
     ("iss", "issAny", True),
@@ -268,6 +441,9 @@ CGT_MEMBERS: list[tuple[str, str, bool]] = [
     ("exp", "numericDate", True),
     ("jti", "jti", True),
     ("aap_ver", "aapVer", False),
+    ("authorization_details", "authorizationDetails", False),
+    ("aap_crit", "aapCrit", False),
+    ("cnf", "cnf", False),
     ("fga_constraints", "string", False),
     ("intent_verified", "bool", False),
     ("max_uses", "posInt", False),
@@ -297,12 +473,16 @@ CLAIM_MEMBERS: dict[str, list[tuple[str, str, bool]]] = {
         ("issuer_chain", "issuerChain", True),
         ("trust_level", "trustLevel", True),
         ("act", "actor", True),
-        ("max_depth", "posInt", True),
+        ("max_depth", "nonNegInt", True),
         ("delegator_atx", "sha256Ref", True),
         ("iat", "numericDate", True),
         ("exp", "numericDate", True),
         ("jti", "jti", True),
         ("aap_ver", "aapVer", False),
+        ("authorization_details", "authorizationDetails", False),
+        ("aap_crit", "aapCrit", False),
+        ("cnf", "cnf", False),
+        ("fga_constraints", "string", False),
     ],
     "bac": [
         ("iss", "issDid", True),
@@ -313,6 +493,7 @@ CLAIM_MEMBERS: dict[str, list[tuple[str, str, bool]]] = {
         ("drift_score", "driftScore", False),
         ("anomaly_state", "nonempty", False),
         ("intent_verified", "bool", False),
+        ("session_label", "labelSet", False),
         ("iat", "numericDate", True),
         ("exp", "numericDate", True),
         ("jti", "jti", True),
@@ -346,6 +527,284 @@ def check_claims(claims: dict, fixture_type: str) -> None:
         for name in needs:
             if name not in claims:
                 _reject("CLAIM_SCHEMA", f'missing required claim "{name}" for bac_level {level}')
+        # §6.4: session_label is an L3 member; it MUST NOT appear at L1 or L2.
+        if level < 3 and "session_label" in claims:
+            _reject(
+                "CLAIM_SCHEMA",
+                f'claim "session_label" MUST NOT appear at bac_level {level} (AAP-SPEC §6.4)',
+            )
+
+
+# --- §4.5 mandatory-to-understand claims -------------------------------------------
+
+
+def check_crit(claims: dict) -> None:
+    crit = claims.get("aap_crit", [])
+    # A mandatory-to-understand claim that is present MUST be named in aap_crit;
+    # a verifier that ignored it would accept a bearer, unconstrained token.
+    for name in UNDERSTOOD_CRIT:
+        if name in claims and name not in crit:
+            _reject(
+                "CRIT_UNLISTED",
+                f'claim "{name}" is present but not named in aap_crit — it is mandatory to '
+                f"understand and MUST be listed (AAP-SPEC §4.5)",
+            )
+    for name in crit:
+        if name not in UNDERSTOOD_CRIT:
+            _reject(
+                "CRIT_NOT_UNDERSTOOD",
+                f'aap_crit names "{name}", which this verifier does not implement as a '
+                f"mandatory-to-understand claim (AAP-SPEC §4.5)",
+            )
+        if name not in claims:
+            _reject(
+                "CRIT_NOT_UNDERSTOOD",
+                f'aap_crit names "{name}" but the token carries no such claim (AAP-SPEC §4.5)',
+            )
+    # §4.4.1: an unknown type inside a mandatory-to-understand claim is not understood.
+    for index, entry in enumerate(claims.get("authorization_details", [])):
+        short_name = entry["type"][len(TYPE_URI_PREFIX):]
+        if short_name not in ENTRY_TYPES:
+            _reject(
+                "CRIT_NOT_UNDERSTOOD",
+                f'authorization_details[{index}] type "{short_name}" is not in the AAP-SPEC '
+                f"§4.4.1 entry type registry — not understood, the token is rejected",
+            )
+
+
+# --- §4.6 proof of possession (presenter binding) ----------------------------------
+
+
+def jwk_thumbprint(jwk: Any) -> str | None:
+    """RFC 7638 thumbprint of an Ed25519 OKP JWK (RFC 8037 §2 required members,
+    lexicographic order, no whitespace, SHA-256, base64url). None if the key is
+    not an Ed25519 OKP key."""
+    if not _is_plain_object(jwk) or jwk.get("kty") != "OKP" or jwk.get("crv") != "Ed25519" or not _nonempty(jwk.get("x")):
+        return None
+    canonical = json.dumps({"crv": jwk["crv"], "kty": jwk["kty"], "x": jwk["x"]}, separators=(",", ":"), sort_keys=True)
+    return base64.urlsafe_b64encode(hashlib.sha256(canonical.encode("utf-8")).digest()).rstrip(b"=").decode("ascii")
+
+
+def check_presenter_binding(claims: dict, presentation: Any) -> None:
+    if "cnf" not in claims:
+        return
+    proof = (presentation or {}).get("proof") if _is_plain_object(presentation) else None
+    if not _is_plain_object(proof):
+        _reject("CNF_MISMATCH", "token carries cnf but no presenter proof was presented (AAP-SPEC §4.6)")
+    # The suite models the broker profile §6.8 A2A/MCP row: a fresh challenge of
+    # at least 16 bytes, returned signed under the presenter's key.
+    if proof.get("binding") != "signed-challenge":
+        _reject("CNF_MISMATCH", f'unsupported presentation binding "{proof.get("binding")}" (broker profile §6.8)')
+    presented = jwk_thumbprint(proof.get("jwk"))
+    if presented is None:
+        _reject("CNF_MISMATCH", "presenter proof key is not an Ed25519 OKP JWK")
+    cnf = claims["cnf"]
+    bound = cnf["jkt"] if "jkt" in cnf else jwk_thumbprint(cnf.get("jwk"))
+    if bound is None:
+        _reject("CNF_MISMATCH", "cnf.jwk is not an Ed25519 OKP JWK")
+    if presented != bound:
+        _reject(
+            "CNF_MISMATCH",
+            f'presenter key thumbprint "{presented}" does not match the cnf binding "{bound}" (AAP-SPEC §4.6)',
+        )
+    challenge = _b64url_decode(proof.get("challenge"), "proof.challenge", "CNF_MISMATCH")
+    if len(challenge) < 16:
+        _reject("CNF_MISMATCH", "presenter proof challenge is shorter than 16 bytes (broker profile §6.8)")
+    sig = _b64url_decode(proof.get("signature"), "proof.signature", "CNF_MISMATCH")
+    try:
+        x = proof["jwk"]["x"]
+        key = Ed25519PublicKey.from_public_bytes(base64.urlsafe_b64decode(x + "=" * (-len(x) % 4)))
+    except Exception:
+        _reject("CNF_MISMATCH", "presenter proof key is not a valid Ed25519 public key")
+    try:
+        key.verify(sig, challenge)
+    except InvalidSignature:
+        _reject("CNF_MISMATCH", "presenter proof signature does not verify under the cnf-bound key (AAP-SPEC §4.6)")
+
+
+# --- §5.4 attenuation (narrower than or equal to) ----------------------------------
+
+
+def decimal_compare(a: str, b: str) -> int:
+    """Compare two non-negative decimal strings; returns -1, 0, or 1."""
+    ia, _, fa = a.partition(".")
+    ib, _, fb = b.partition(".")
+    na = ia.lstrip("0") or "0"
+    nb = ib.lstrip("0") or "0"
+    if len(na) != len(nb):
+        return -1 if len(na) < len(nb) else 1
+    if na != nb:
+        return -1 if na < nb else 1
+    width = max(len(fa), len(fb))
+    pa = fa.ljust(width, "0")
+    pb = fb.ljust(width, "0")
+    if pa == pb:
+        return 0
+    return -1 if pa < pb else 1
+
+
+def destination_covered(child: str, parent: str) -> bool:
+    """network.destinations coverage (§5.4): an element equals an E element or
+    matches an E `*.` pattern; an E' pattern is covered only by an equal or
+    broader E pattern."""
+    if child == parent:
+        return True
+    if not parent.startswith("*."):
+        return False
+    suffix = parent[1:]  # ".example.com"
+    if child.startswith("*."):
+        child_suffix = child[1:]
+        return child_suffix != suffix and child_suffix.endswith(suffix)
+    host = child.split(":")[0]
+    return host.endswith(suffix) and host != suffix[1:]
+
+
+def subset_of(child_set: list, parent_set: list, member: str) -> bool:
+    if member == "destinations":
+        return all(any(destination_covered(c, p) for p in parent_set) for c in child_set)
+    parent = set(parent_set)
+    return all(c in parent for c in child_set)
+
+
+def narrower_or_equal(child: dict, parent: dict) -> str | None:
+    """None when child (E') is narrower than or equal to parent (E) under the
+    §5.4 member kinds, else a short reason. Entries share a type."""
+    for m in IDENTITY_MEMBERS:
+        if m in parent and not (m in child and child[m] == parent[m]):
+            return f"{m} differs from the delegator's"
+    for m in ALLOW_SET_MEMBERS:
+        if m not in child:
+            continue  # absent in E' inherits E's value
+        if m in parent:
+            if not subset_of(child[m], parent[m], m):
+                return f"{m} is not a subset of the delegator's"
+        elif m in CEILING_MEMBERS and len(child[m]) > 0:
+            return f"{m} names labels the delegator did not carry"
+    for m in DENY_SET_MEMBERS:
+        parent_set = parent.get(m, [])
+        child_set = set(child.get(m, []))
+        if not all(x in child_set for x in parent_set):
+            return f"{m} is not a superset of the delegator's"
+    for m in ("maxUses", "concurrency"):
+        if m in child and m in parent and child[m] > parent[m]:
+            return f"{m} exceeds the delegator's"
+    if "subDelegationDepth" in child and "subDelegationDepth" in parent:
+        if child["subDelegationDepth"] >= parent["subDelegationDepth"]:
+            return "subDelegationDepth is not strictly less than the delegator's"
+    if "rate" in child and "rate" in parent:
+        if child["rate"]["max"] > parent["rate"]["max"]:
+            return "rate.max exceeds the delegator's"
+        if child["rate"]["windowSeconds"] < parent["rate"]["windowSeconds"]:
+            return "rate.windowSeconds is shorter than the delegator's"
+    if "spend" in child and "spend" in parent:
+        if child["spend"]["currency"] != parent["spend"]["currency"]:
+            return "spend is in a currency the delegator does not carry"
+        if decimal_compare(child["spend"]["amount"], parent["spend"]["amount"]) > 0:
+            return "spend.amount exceeds the delegator's"
+    if "tokenCap" in child and "tokenCap" in parent:
+        for k in ("input", "output"):
+            if k in child["tokenCap"] and k in parent["tokenCap"] and child["tokenCap"][k] > parent["tokenCap"][k]:
+                return f"tokenCap.{k} exceeds the delegator's"
+    for m in FLAG_MEMBERS:
+        if parent.get(m) is True and child.get(m) is not True:
+            return f"{m} is relaxed from the delegator's"
+    if "argumentConstraints" in parent:
+        for tool, args in parent["argumentConstraints"].items():
+            for arg, constraint in args.items():
+                child_constraint = child.get("argumentConstraints", {}).get(tool, {}).get(arg)
+                if child_constraint != constraint:
+                    return f"argumentConstraints for {tool}.{arg} is not carried unchanged"
+    return None
+
+
+def check_attenuation(claims: dict, delegator_claims: dict) -> None:
+    if "authorization_details" not in claims:
+        return
+    parents = delegator_claims.get("authorization_details", [])
+    for index, entry in enumerate(claims["authorization_details"]):
+        short_name = entry["type"][len(TYPE_URI_PREFIX):]
+        candidates = [p for p in parents if p["type"] == entry["type"]]
+        if not candidates:
+            _reject(
+                "NOT_ATTENUATED",
+                f"authorization_details[{index}] (type {short_name}) has no parent entry of the "
+                f"same type in the delegator's grant — an orphan entry (AAP-SPEC §5.4)",
+            )
+        reasons = [narrower_or_equal(entry, p) for p in candidates]
+        if None not in reasons:
+            _reject(
+                "NOT_ATTENUATED",
+                f"authorization_details[{index}] (type {short_name}) is not narrower than or equal "
+                f"to any delegator entry of the same type: {reasons[0]} (AAP-SPEC §5.4)",
+            )
+
+
+def check_delegation(claims: dict, delegator_claims: dict) -> None:
+    delegator_is_da = "act" in delegator_claims
+    # Linkage: the supplied token must be this DA's immediate delegator.
+    if claims["act"]["sub"] != delegator_claims["sub"]:
+        _reject(
+            "DELEGATOR_INVALID",
+            f'delegator token subject "{delegator_claims["sub"]}" is not the DA\'s act.sub "{claims["act"]["sub"]}"',
+        )
+    if delegator_is_da and claims["act"].get("act") != delegator_claims["act"]:
+        _reject("DELEGATOR_INVALID", "the DA's act chain does not continue the delegator's act chain (RFC 8693 §4.1)")
+    # §5.2/§5.3: scope and trust_class equal to or a subset of the delegator's.
+    da_scopes = str(claims["scope"]).split(" ")
+    delegator_scopes = set(str(delegator_claims["scope"]).split(" "))
+    if not all(s in delegator_scopes for s in da_scopes):
+        _reject(
+            "SCOPE_NOT_SUBSET",
+            f'DA scope "{claims["scope"]}" is not a subset of the delegator scope '
+            f'"{delegator_claims["scope"]}" (AAP-SPEC §5.2)',
+        )
+    if claims["trust_class"] != delegator_claims["trust_class"]:
+        _reject(
+            "SCOPE_NOT_SUBSET",
+            f'DA trust_class "{claims["trust_class"]}" is not equal to or a subset of the delegator '
+            f'trust_class "{delegator_claims["trust_class"]}" (AAP-SPEC §5.3)',
+        )
+    # §5.4: a DA carries less than its delegator — it cannot outlive it, so its
+    # validity window ends no later than the delegator's. The start of the
+    # window is not ordered by the spec (it is bounded only by the family
+    # clock-skew bound) and is not checked.
+    if claims["exp"] > delegator_claims["exp"]:
+        _reject(
+            "NOT_ATTENUATED",
+            f"DA validity window ends (exp {claims['exp']}) after the delegator's "
+            f"(exp {delegator_claims['exp']}) (AAP-SPEC §5.4)",
+        )
+    check_attenuation(claims, delegator_claims)
+    # §5.3: max_depth is the remaining depth below this assertion. A delegator
+    # DA at depth 0 is terminal; below a delegator DA at depth d the DA may carry
+    # at most d - 1; a delegator peer_agent entry for this DA's sub caps it too.
+    if delegator_is_da:
+        if delegator_claims["max_depth"] < 1:
+            _reject(
+                "NOT_ATTENUATED",
+                "the delegator is a terminal delegation (max_depth 0); delegating past it is "
+                "not permitted (AAP-SPEC §5.3)",
+            )
+        if claims["max_depth"] > delegator_claims["max_depth"] - 1:
+            _reject(
+                "NOT_ATTENUATED",
+                f"max_depth {claims['max_depth']} exceeds the delegator's remaining depth "
+                f"{delegator_claims['max_depth'] - 1} (AAP-SPEC §5.3)",
+            )
+    peer = next(
+        (
+            e
+            for e in delegator_claims.get("authorization_details", [])
+            if e["type"] == f"{TYPE_URI_PREFIX}peer_agent" and e.get("peerDid") == claims["sub"]
+        ),
+        None,
+    )
+    if peer is not None and claims["max_depth"] > peer["subDelegationDepth"]:
+        _reject(
+            "NOT_ATTENUATED",
+            f"max_depth {claims['max_depth']} exceeds the delegator's peer_agent subDelegationDepth "
+            f"{peer['subDelegationDepth']} for this delegatee (AAP-SPEC §5.4)",
+        )
 
 
 # --- token verification -------------------------------------------------------------
@@ -378,7 +837,9 @@ def verify_compact_structure(token: Any, keys: dict[str, KeyEntry]) -> dict:
     return claims
 
 
-def verify_general_structure(token_general: Any, keys: dict[str, KeyEntry]) -> dict:
+def verify_general_structure(
+    token_general: Any, keys: dict[str, KeyEntry], required_suites: tuple[str, ...] = ()
+) -> dict:
     if not _is_plain_object(token_general):
         _reject("MALFORMED_TOKEN", "general serialization is not a JSON object")
     payload = token_general.get("payload")
@@ -418,6 +879,18 @@ def verify_general_structure(token_general: Any, keys: dict[str, KeyEntry]) -> d
             "general-form token declares ML-DSA-65 but carries no Ed25519 entry — "
             "the hybrid profile requires at least one entry of each family (AAP-SPEC §9.4)",
         )
+    # Path policy (§8.2): suite acceptance is pinned by the verifier per path,
+    # never selected by the token. A token missing a verifying entry of a suite
+    # the path requires is a hybrid token with that declared entry stripped — it
+    # MUST NOT degrade to acceptance on the remaining family (§9.4).
+    for suite in required_suites:
+        if suite not in declared_algs:
+            _reject(
+                "HYBRID_INCOMPLETE",
+                f"verifier path policy requires a verifying {suite} entry but the token carries "
+                f"only [{', '.join(declared_algs)}] — a declared entry stripped from a hybrid token "
+                f"cannot degrade it to single-family acceptance (AAP-SPEC §8.2, §9.4)",
+            )
     try:
         claims = json.loads(
             base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)).decode("utf-8")
@@ -463,11 +936,14 @@ def verify_presentation(fixture: dict, jti_cache: dict[str, int]) -> Result:
 
     try:
         if fixture.get("tokenForm") == "general":
-            claims = verify_general_structure(fixture.get("tokenGeneral"), keys)
+            required = verifier_state.get("requiredSuites")
+            required_suites = tuple(required) if isinstance(required, list) else ()
+            claims = verify_general_structure(fixture.get("tokenGeneral"), keys, required_suites)
         else:
             claims = verify_compact_structure(fixture.get("token"), keys)
 
         check_claims(claims, fixture_type)
+        check_crit(claims)
 
         if _is_int(clock) and clock >= claims["exp"]:
             _reject("EXPIRED", f"token expired (exp {claims['exp']} <= clock {clock})")
@@ -477,20 +953,17 @@ def verify_presentation(fixture: dict, jti_cache: dict[str, int]) -> Result:
                 f"BAC validity window exp - iat = {claims['exp'] - claims['iat']}s "
                 f"exceeds the 60-second cap (AAP-SPEC §6.1)",
             )
+        check_presenter_binding(claims, fixture.get("presentation"))
         delegation = fixture.get("delegation") or {}
         if fixture_type == "da" and "delegatorToken" in delegation:
             try:
                 delegator_claims = verify_compact_structure(delegation["delegatorToken"], keys)
+                # The immediate delegator is a CGT, or a DA when the chain is deeper.
+                check_claims(delegator_claims, "da" if "act" in delegator_claims else "cgt")
+                check_crit(delegator_claims)
             except Reject as exc:
                 _reject("DELEGATOR_INVALID", f"delegator token: {exc.reason}")
-            da_scopes = str(claims["scope"]).split(" ")
-            delegator_scopes = set(str(delegator_claims["scope"]).split(" "))
-            if not all(s in delegator_scopes for s in da_scopes):
-                _reject(
-                    "SCOPE_NOT_SUBSET",
-                    f'DA scope "{claims["scope"]}" is not a subset of the delegator scope '
-                    f'"{delegator_claims["scope"]}" (AAP-SPEC §5.2)',
-                )
+            check_delegation(claims, delegator_claims)
 
         # §8.1: receivers MUST track used jti values for the token's TTL window
         # and MUST reject a repeated identifier. Judged last — replay is only

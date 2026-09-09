@@ -129,7 +129,35 @@ const JTI = {
   bacTtl: "6f708192a3b4c5d6e7f8091a2b3c4d5e",
   bacL3: "708192a3b4c5d6e7f8091a2b3c4d5e6f",
   daSuperset: "8192a3b4c5d6e7f8091a2b3c4d5e6f70",
+  // The three spec-repo 0.5 fixture jtis (generate_examples.py JTI["cgt_fgc"],
+  // JTI["da_fgc"], JTI["bac_session"]).
+  cgtFgc: "c3d4e5f6a7b8091a2b3c4d5e6f708192",
+  daFgc: "d4e5f6a7b8c9012b3c4d5e6f70819203",
+  bacSession: "e5f6a7b8c9d0123c4d5e6f7081920314",
+  // Fresh deterministic constants for the 0.5 reject-set and minted-ACCEPT tokens.
+  critUnknownEntryType: "92a3b4c5d6e7f8091a2b3c4d5e6f7081",
+  critUnsupportedClaim: "a3b4c5d6e7f8091a2b3c4d5e6f708192",
+  cnfUnlisted: "b4c5d6e7f8091a2b3c4d5e6f70819203",
+  daWidened: "c5d6e7f8091a2b3c4d5e6f7081920314",
+  daTerminal: "d6e7f8091a2b3c4d5e6f708192031425",
+  daPastTerminal: "e7f8091a2b3c4d5e6f70819203142536",
+  daOutlives: "f8091a2b3c4d5e6f7081920314253647",
+  cgtAuditBot: "091a2b3c4d5e6f708192031425364758",
+  critNamesAbsent: "1a2b3c4d5e6f70819203142536475869",
+  critEmpty: "2b3c4d5e6f7081920314253647586970",
+  daTrustClass: "3c4d5e6f708192031425364758697081",
+  daDepthTwo: "4d5e6f70819203142536475869708192",
+  daExceedsRemaining: "5e6f7081920314253647586970819203",
+  cgtPeerCap: "6f708192031425364758697081920314",
 };
+
+// AAP-SPEC §4.4.1: entry `type` values are URIs under the family prefix.
+const TYPE_URI = "https://specs.opena2a.org/aap/types/";
+// A third agent, delegatee of the past-terminal-depth chain.
+const AUDIT_BOT_DID = "did:opena2a:agent:acme/audit-bot";
+// The delegator ATX hash carried by a DA whose delegator is reporting-bot
+// (a fixture constant with the same construction as ATX_REFERENCE).
+const REPORTING_BOT_ATX = "sha256:" + sha256hex("aap-conformance reporting-bot atx");
 
 // --- JWS primitives (mirror assertion.ts exactly) ------------------------------
 
@@ -257,6 +285,131 @@ const bacClaims = (overrides = {}) => ({
   ...overrides,
 });
 
+// --- 0.5 claim sets (AAP-SPEC §4.7, §5.5, §6.5; member order as the spec generator) --
+
+// RFC 7638 thumbprint of an Ed25519 OKP JWK: the RFC 8037 required members
+// in lexicographic order, compact JSON, SHA-256, base64url.
+const jwkThumbprint = (jwk) =>
+  createHash("sha256")
+    .update(JSON.stringify({ crv: jwk.crv, kty: jwk.kty, x: jwk.x }))
+    .digest("base64url");
+
+// RFC 7800 cnf bound to a presenter test key by thumbprint (jkt). The
+// published thumbprint in vectors/test-keys.json must agree, or the key file
+// has drifted from its seeds.
+function cnfClaim(kid) {
+  const entry = TEST_KEYS.keys.find((k) => k.kid === kid);
+  const jkt = jwkThumbprint(entry.publicJwk);
+  if (jkt !== entry.jkt) throw new Error(`test key ${kid}: published jkt does not match the derived thumbprint`);
+  return { jkt };
+}
+
+// The §4.7 grant: one data entry and one budget entry.
+const cgtAuthorizationDetails = () => [
+  {
+    type: `${TYPE_URI}data`,
+    locations: ["https://api.orders.internal/orders"],
+    actions: ["read"],
+    fieldsAllowed: ["id", "status", "total"],
+    fieldsDenied: ["customer.email"],
+    labelCeiling: ["internal"],
+  },
+  { type: `${TYPE_URI}budget`, maxUses: 100, rate: { max: 60, windowSeconds: 60 } },
+];
+
+// The §5.5 attenuated delegation: fewer fields, a smaller budget.
+const daAuthorizationDetails = () => [
+  {
+    type: `${TYPE_URI}data`,
+    locations: ["https://api.orders.internal/orders"],
+    actions: ["read"],
+    fieldsAllowed: ["id", "status"],
+    fieldsDenied: ["customer.email"],
+    labelCeiling: ["internal"],
+  },
+  { type: `${TYPE_URI}budget`, maxUses: 10, rate: { max: 10, windowSeconds: 60 } },
+];
+
+// The 0.5 members sit after the baseline members and before the validity
+// window (§4.7), so the baseline byte order is unchanged.
+const cgtFgcClaims = (overrides = {}) => ({
+  iss: BROKER_ISSUER,
+  sub: AGENT_DID,
+  aud: "https://api.orders.internal",
+  scope: "orders.read",
+  trust_class: "orders:read",
+  issuer_chain: [REGISTRY_ISSUER],
+  trust_level: 4,
+  authorization_details: cgtAuthorizationDetails(),
+  aap_crit: ["authorization_details", "cnf"],
+  cnf: cnfClaim("agent-key-1"),
+  iat: IAT,
+  exp: IAT + 300,
+  jti: JTI.cgtFgc,
+  ...overrides,
+});
+
+const daFgcClaims = (overrides = {}) => ({
+  iss: BROKER_ISSUER,
+  sub: DELEGATEE_DID,
+  aud: "https://api.orders.internal",
+  scope: "orders.read",
+  trust_class: "orders:read",
+  issuer_chain: [REGISTRY_ISSUER],
+  trust_level: 4,
+  authorization_details: daAuthorizationDetails(),
+  aap_crit: ["authorization_details", "cnf"],
+  cnf: cnfClaim("agent-key-2"),
+  act: { sub: AGENT_DID },
+  max_depth: 1,
+  delegator_atx: ATX_REFERENCE,
+  iat: IAT,
+  exp: IAT + 300,
+  jti: JTI.daFgc,
+  ...overrides,
+});
+
+// §6.5: the L3 attestation for a session that has admitted one `internal`
+// labeled field; session_label sits after intent_verified, before iat.
+const bacSessionClaims = () => ({
+  iss: REGISTRY_ISSUER,
+  sub: AGENT_DID,
+  bac_level: 3,
+  atx_reference: ATX_REFERENCE,
+  binary_hash: BINARY_HASH,
+  drift_score: 0.04,
+  anomaly_state: "nominal",
+  intent_verified: true,
+  session_label: ["internal"],
+  iat: IAT,
+  exp: IAT + 60,
+  jti: JTI.bacSession,
+});
+
+// --- presenter proof (AAP-SPEC §4.6; broker profile §6.8, A2A/MCP row) ------------
+
+// The spec defines the proof formats per binding in prose and publishes no
+// example proof, so the suite models the signed-challenge binding
+// deterministically: the challenge is SHA-256 of a fixed label (32 bytes,
+// above the 16-byte floor), and the proof is the presenter key's Ed25519
+// signature over those challenge bytes. The proof carries the presenter's
+// public JWK; a verifier binds it to the token by comparing its RFC 7638
+// thumbprint with cnf.jkt and then verifying the signature under it.
+function presenterProof(kid, label) {
+  const challenge = createHash("sha256").update(`aap-conformance presenter challenge ${label}`).digest();
+  const key = KEYS.get(kid);
+  const signature = cryptoSign(null, challenge, key.priv);
+  if (!cryptoVerify(null, challenge, key.pub, signature)) throw new Error(`presenter proof ${kid}: self-verify failed`);
+  return {
+    proof: {
+      binding: "signed-challenge",
+      challenge: b64url(challenge),
+      jwk: key.jwk,
+      signature: b64url(signature),
+    },
+  };
+}
+
 // --- spec reference shorthands --------------------------------------------------
 
 const ref = (section) => ({ id: "AAP", ref: SPEC_URL, section });
@@ -274,6 +427,26 @@ const RFC9964 = {
   id: "RFC 9964",
   ref: "https://datatracker.ietf.org/doc/html/rfc9964",
   section: "ML-DSA for JOSE and COSE (the ML-DSA-65 alg and AKP key type)",
+};
+const RFC9396 = {
+  id: "RFC 9396",
+  ref: "https://datatracker.ietf.org/doc/html/rfc9396",
+  section: "OAuth 2.0 Rich Authorization Requests (the authorization_details claim)",
+};
+const RFC7800 = {
+  id: "RFC 7800",
+  ref: "https://datatracker.ietf.org/doc/html/rfc7800",
+  section: "Proof-of-Possession Key Semantics for JWTs (the cnf claim)",
+};
+const RFC7638 = {
+  id: "RFC 7638",
+  ref: "https://datatracker.ietf.org/doc/html/rfc7638",
+  section: "JSON Web Key (JWK) Thumbprint (the jkt confirmation method, RFC 9449 §6.1)",
+};
+const BROKER_PROFILE_6_8 = {
+  id: "AAP-BROKER-PROFILE",
+  ref: "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-BROKER-PROFILE.md",
+  section: "§6.8 Presentation binding (signed challenge)",
 };
 
 const keyRef = (kid) => ({ kid, publicJwk: KEYS.get(kid).jwk });
@@ -305,6 +478,18 @@ const CGT_MLDSA65_TOKEN = mintCompact(
 const CGT_HYBRID = mintGeneral(
   [{ kid: "broker-key-1" }, { kid: "broker-pqc-1" }],
   cgtClaims(),
+);
+// The three spec-repo 0.5 tokens (byte-identical to examples/tokens/
+// cgt-v1.fgc.jwt, da-v1.fgc.jwt and bac-v1.session.jwt at the pinned ref).
+const CGT_FGC_TOKEN = mintCompact("broker-key-1", compactHeader("broker-key-1"), cgtFgcClaims());
+const DA_FGC_TOKEN = mintCompact("broker-key-1", compactHeader("broker-key-1"), daFgcClaims());
+const BAC_SESSION_TOKEN = mintCompact("registry-key-1", compactHeader("registry-key-1"), bacSessionClaims());
+// A terminal delegation (max_depth 0, §5.3). The spec repo publishes no
+// depth-0 example, so this token is minted here with the §5.3 claim set.
+const DA_TERMINAL_TOKEN = mintCompact(
+  "broker-key-1",
+  compactHeader("broker-key-1"),
+  daClaims({ max_depth: 0, jti: JTI.daTerminal }),
 );
 
 const fixtures = [];
@@ -398,10 +583,67 @@ fixture("cgt-hybrid-general-valid", {
   fixtureType: "cgt",
   tokenForm: "general",
   spec: [ref("§9.4 Multi-Signature Form (hybrid profile)"), ref("§8.2 Cryptographic Agility"), RFC7515, RFC8032, RFC9964],
-  verifierState: state(["broker-key-1", "broker-pqc-1"]),
+  // Path policy (§8.2): this path requires both families; the token carries both.
+  verifierState: { ...state(["broker-key-1", "broker-pqc-1"]), requiredSuites: ["EdDSA", "ML-DSA-65"] },
   expected: { verifyResult: "ACCEPT" },
   schemaValid: true,
   tokenGeneral: CGT_HYBRID,
+});
+
+fixture("cgt-compact-fgc-valid", {
+  description:
+    "The spec repo's generated 0.5 CGT (examples/tokens/cgt-v1.fgc.jwt, AAP-SPEC §4.7): the §4.2 claim set plus authorization_details (one data entry, one budget entry, registry-URI types), aap_crit naming both mandatory-to-understand claims, and cnf bound by RFC 7638 thumbprint (jkt) to the presenter test key agent-key-1. The presentation carries agent-key-1's signed-challenge proof, so the presenter binding of §4.6 holds. Verifier MUST ACCEPT.",
+  fixtureType: "cgt",
+  tokenForm: "compact",
+  spec: [ref("§4.7 Example with authorization details"), ref("§4.4 Authorization details"), ref("§4.5 Mandatory to understand claims"), ref("§4.6 Proof of possession"), BROKER_PROFILE_6_8, RFC9396, RFC7800, RFC7638],
+  verifierState: state(["broker-key-1"]),
+  presentation: presenterProof("agent-key-1", JTI.cgtFgc),
+  expected: { verifyResult: "ACCEPT" },
+  schemaValid: true,
+  headerSchemaValid: true,
+  token: CGT_FGC_TOKEN,
+});
+
+fixture("da-compact-fgc-valid", {
+  description:
+    "The spec repo's generated 0.5 DA (examples/tokens/da-v1.fgc.jwt, AAP-SPEC §5.5): orders-reader delegates to reporting-bot with fewer fields (fieldsAllowed id, status) and a smaller budget (maxUses 10, rate.max 10) than the §4.7 grant, which the delegation context carries as the delegator token. Every entry is narrower than or equal to a delegator entry of the same type (§5.4), scope and trust_class are equal, max_depth 1, and cnf binds the delegatee's presenter key agent-key-2, whose signed-challenge proof is presented. Verifier MUST ACCEPT.",
+  fixtureType: "da",
+  tokenForm: "compact",
+  spec: [ref("§5.5 Example of an attenuated delegation"), ref("§5.4 Attenuation"), ref("§5.3 Assertion Form"), ref("§4.6 Proof of possession"), BROKER_PROFILE_6_8, RFC9396, RFC7800],
+  verifierState: state(["broker-key-1"]),
+  delegation: { delegatorToken: CGT_FGC_TOKEN },
+  presentation: presenterProof("agent-key-2", JTI.daFgc),
+  expected: { verifyResult: "ACCEPT" },
+  schemaValid: true,
+  headerSchemaValid: true,
+  token: DA_FGC_TOKEN,
+});
+
+fixture("bac-compact-session-valid", {
+  description:
+    "The spec repo's generated 0.5 BAC (examples/tokens/bac-v1.session.jwt, AAP-SPEC §6.5): the L3 attestation carrying session_label [internal] — the set of labels the session has admitted so far (§4.4.2) — with the 60-second window unchanged. Verifier MUST ACCEPT.",
+  fixtureType: "bac",
+  tokenForm: "compact",
+  spec: [ref("§6.5 Example with a session label"), ref("§6.4 Claim Set (session_label, L3 only)"), ref("§4.4.2 Label semantics")],
+  verifierState: state(["registry-key-1"]),
+  expected: { verifyResult: "ACCEPT" },
+  schemaValid: true,
+  headerSchemaValid: true,
+  token: BAC_SESSION_TOKEN,
+});
+
+fixture("da-compact-terminal-depth-zero", {
+  description:
+    "A DA with max_depth 0 — a terminal delegation (§5.3: max_depth is an integer >= 0 and 0 is expressible; the 0.5 da-claims-v1 schema lowers the floor from 1 to 0). Delegator is the spec repo's cgt-v1.jwt; scope and trust_class are equal and the validity window is the delegator's. Minted here (the spec repo publishes no depth-0 example). A verifier that still floors max_depth at 1 wrongly rejects it. Verifier MUST ACCEPT.",
+  fixtureType: "da",
+  tokenForm: "compact",
+  spec: [ref("§5.3 Assertion Form (max_depth >= 0; 0 is a terminal delegation)"), ref("§5.2 Constraints")],
+  verifierState: state(["broker-key-1"]),
+  delegation: { delegatorToken: CGT_TOKEN },
+  expected: { verifyResult: "ACCEPT" },
+  schemaValid: true,
+  headerSchemaValid: true,
+  token: DA_TERMINAL_TOKEN,
 });
 
 // -------- REJECT ----------------------------------------------------------------
@@ -677,6 +919,304 @@ fixture("da-compact-scope-superset", {
     compactHeader("broker-key-1"),
     daClaims({ scope: "orders.read orders.write", jti: JTI.daSuperset }),
   ),
+});
+
+// -------- REJECT: AAP-SPEC 0.5 (§4.4-§4.6, §5.3-§5.4, §9.4 path policy) ---------
+
+fixture("cgt-compact-crit-unknown-entry-type", {
+  description:
+    "The §4.7 CGT claim set with the data entry's type replaced by https://specs.opena2a.org/aap/types/payment — a type absent from the §4.4.1 entry type registry — while aap_crit names authorization_details. §4.4.1: a verifier that meets an entry type it does not implement MUST reject the token, because an unknown type inside a mandatory-to-understand claim is not understood. The signature, the presenter proof (agent-key-1) and every other member are valid; the entry type is the sole defect. Verifier MUST REJECT with CRIT_NOT_UNDERSTOOD.",
+  fixtureType: "cgt",
+  tokenForm: "compact",
+  spec: [ref("§4.4.1 Entry type registry (unknown type MUST reject)"), ref("§4.5 Mandatory to understand claims"), RFC9396],
+  verifierState: state(["broker-key-1"]),
+  presentation: presenterProof("agent-key-1", JTI.critUnknownEntryType),
+  expected: { verifyResult: "REJECT", rejectCategory: "CRIT_NOT_UNDERSTOOD", reasonContains: "payment" },
+  schemaValid: true,
+  headerSchemaValid: true,
+  token: (() => {
+    const details = cgtAuthorizationDetails();
+    details[0].type = `${TYPE_URI}payment`;
+    return mintCompact(
+      "broker-key-1",
+      compactHeader("broker-key-1"),
+      cgtFgcClaims({ authorization_details: details, jti: JTI.critUnknownEntryType }),
+    );
+  })(),
+});
+
+fixture("cgt-compact-crit-unsupported-claim", {
+  description:
+    "The §4.7 CGT claim set plus a private claim x_tenant, with aap_crit naming authorization_details, cnf and x_tenant. §4.5: a verifier that encounters a name in aap_crit that it does not implement MUST reject the token — the reference verifiers implement authorization_details and cnf as mandatory to understand and nothing else. The claim set is schema-valid (unknown claims are optional to ignore unless named in aap_crit, §9.6), the signature and the presenter proof are valid; the unsupported aap_crit name is the sole defect. Verifier MUST REJECT with CRIT_NOT_UNDERSTOOD.",
+  fixtureType: "cgt",
+  tokenForm: "compact",
+  spec: [ref("§4.5 Mandatory to understand claims"), ref("§9.6 Claim Conventions (unknown claims)")],
+  verifierState: state(["broker-key-1"]),
+  presentation: presenterProof("agent-key-1", JTI.critUnsupportedClaim),
+  expected: { verifyResult: "REJECT", rejectCategory: "CRIT_NOT_UNDERSTOOD", reasonContains: "x_tenant" },
+  schemaValid: true,
+  headerSchemaValid: true,
+  token: (() => {
+    const claims = cgtFgcClaims({ aap_crit: ["authorization_details", "cnf", "x_tenant"], jti: JTI.critUnsupportedClaim });
+    // x_tenant sits with the 0.5 members, before the validity window.
+    const { iat, exp, jti, ...head } = claims;
+    return mintCompact("broker-key-1", compactHeader("broker-key-1"), { ...head, x_tenant: "acme", iat, exp, jti });
+  })(),
+});
+
+fixture("cgt-compact-cnf-unlisted", {
+  description:
+    "The §4.7 CGT claim set with aap_crit naming only authorization_details while cnf is present. §4.5: cnf MUST be listed whenever it is present, because a verifier that ignores cnf accepts the token as a bearer token — the downgrade §4.6 exists to prevent. The signature and the presenter proof (agent-key-1) are valid; the missing aap_crit entry is the sole defect. Verifier MUST REJECT with CRIT_UNLISTED.",
+  fixtureType: "cgt",
+  tokenForm: "compact",
+  spec: [ref("§4.5 Mandatory to understand claims (cnf MUST be listed)"), ref("§4.6 Proof of possession"), ref("§8.6 Presentation is not possession")],
+  verifierState: state(["broker-key-1"]),
+  presentation: presenterProof("agent-key-1", JTI.cnfUnlisted),
+  expected: { verifyResult: "REJECT", rejectCategory: "CRIT_UNLISTED", reasonContains: "cnf" },
+  schemaValid: true,
+  headerSchemaValid: true,
+  token: mintCompact(
+    "broker-key-1",
+    compactHeader("broker-key-1"),
+    cgtFgcClaims({ aap_crit: ["authorization_details"], jti: JTI.cnfUnlisted }),
+  ),
+});
+
+fixture("cgt-compact-cnf-mismatch", {
+  description:
+    "Byte-identical to cgt-compact-fgc-valid (the spec repo's cgt-v1.fgc.jwt, cnf bound to agent-key-1); only the presentation differs — the signed-challenge proof is produced by agent-key-2, whose RFC 7638 thumbprint is not the token's cnf.jkt. §4.6: a verifier that receives a token with cnf MUST verify the presenter's proof against the bound key and MUST reject the token otherwise. The token signature is valid; the presenter binding is the sole defect. Verifier MUST REJECT with CNF_MISMATCH.",
+  fixtureType: "cgt",
+  tokenForm: "compact",
+  spec: [ref("§4.6 Proof of possession"), ref("§8.6 Presentation is not possession"), BROKER_PROFILE_6_8, RFC7800, RFC7638],
+  verifierState: state(["broker-key-1"]),
+  presentation: presenterProof("agent-key-2", JTI.cgtFgc),
+  expected: { verifyResult: "REJECT", rejectCategory: "CNF_MISMATCH", reasonContains: "cnf" },
+  schemaValid: true,
+  headerSchemaValid: true,
+  token: CGT_FGC_TOKEN,
+});
+
+fixture("da-compact-authorization-details-widened", {
+  description:
+    "The §5.5 DA claim set with the data entry's fieldsAllowed widened to [id, status, total, customer.name] against the §4.7 delegator grant, whose data entry allows [id, status, total]. §5.4: fieldsAllowed is an allow set member, so the delegatee's set MUST be a subset of the delegator's; an entry with no delegator entry it is narrower than or equal to makes the DA invalid. Scope, trust_class, the budget entry, max_depth and the presenter proof (agent-key-2) are all valid; the widened allow set is the sole defect. Verifier MUST REJECT with NOT_ATTENUATED.",
+  fixtureType: "da",
+  tokenForm: "compact",
+  spec: [ref("§5.4 Attenuation (allow set members)"), ref("§5.3 Assertion Form"), ref("§5.1 Purpose (scope cannot exceed the delegator's)")],
+  verifierState: state(["broker-key-1"]),
+  delegation: { delegatorToken: CGT_FGC_TOKEN },
+  presentation: presenterProof("agent-key-2", JTI.daWidened),
+  expected: { verifyResult: "REJECT", rejectCategory: "NOT_ATTENUATED", reasonContains: "fieldsAllowed" },
+  schemaValid: true,
+  headerSchemaValid: true,
+  token: (() => {
+    const details = daAuthorizationDetails();
+    details[0].fieldsAllowed = ["id", "status", "total", "customer.name"];
+    return mintCompact(
+      "broker-key-1",
+      compactHeader("broker-key-1"),
+      daFgcClaims({ authorization_details: details, jti: JTI.daWidened }),
+    );
+  })(),
+});
+
+fixture("da-compact-past-terminal-depth", {
+  description:
+    "A DA delegated FROM a terminal delegation: the delegator token is the depth-0 DA of da-compact-terminal-depth-zero (reporting-bot, max_depth 0), and this DA delegates onward to audit-bot with act nesting the chain (act.sub reporting-bot, act.act.sub orders-reader) and max_depth 0. §5.3: max_depth is the remaining delegation depth below an assertion and 0 is terminal, so no delegation below it is permitted. Scope, trust_class and the validity window equal the delegator's; the depth is the sole defect. Verifier MUST REJECT with NOT_ATTENUATED.",
+  fixtureType: "da",
+  tokenForm: "compact",
+  spec: [ref("§5.3 Assertion Form (max_depth: 0 is a terminal delegation)"), ref("§5.4 Attenuation (checked link by link)"), { id: "RFC 8693", ref: "https://datatracker.ietf.org/doc/html/rfc8693", section: "§4.1 (nested act)" }],
+  verifierState: state(["broker-key-1"]),
+  delegation: { delegatorToken: DA_TERMINAL_TOKEN },
+  expected: { verifyResult: "REJECT", rejectCategory: "NOT_ATTENUATED", reasonContains: "max_depth" },
+  schemaValid: true,
+  headerSchemaValid: true,
+  token: mintCompact(
+    "broker-key-1",
+    compactHeader("broker-key-1"),
+    daClaims({
+      sub: AUDIT_BOT_DID,
+      act: { sub: DELEGATEE_DID, act: { sub: AGENT_DID } },
+      max_depth: 0,
+      delegator_atx: REPORTING_BOT_ATX,
+      jti: JTI.daPastTerminal,
+    }),
+  ),
+});
+
+fixture("da-compact-outlives-delegator", {
+  description:
+    "The §5.5 DA claim set with exp = iat + 600, later than the delegator's exp = iat + 300 (the §4.7 grant, carried as the delegator token). §5.4: a DA can only carry less than the delegator's grant, and iat/exp are the token's validity window (§4.2), so a DA that outlives its delegator carries authority after the delegator's has lapsed. The pinned clock (iat + 30) is inside both windows, the signature, the presenter proof (agent-key-2), scope, trust_class, authorization_details and max_depth are all valid; the later exp is the sole defect. Verifier MUST REJECT with NOT_ATTENUATED.",
+  fixtureType: "da",
+  tokenForm: "compact",
+  spec: [ref("§5.4 Attenuation (a DA carries less than the delegator's grant)"), ref("§4.2 Token Structure (iat/exp: the validity window)"), ref("§5.3 Assertion Form")],
+  verifierState: state(["broker-key-1"]),
+  delegation: { delegatorToken: CGT_FGC_TOKEN },
+  presentation: presenterProof("agent-key-2", JTI.daOutlives),
+  expected: { verifyResult: "REJECT", rejectCategory: "NOT_ATTENUATED", reasonContains: "exp" },
+  schemaValid: true,
+  headerSchemaValid: true,
+  token: mintCompact(
+    "broker-key-1",
+    compactHeader("broker-key-1"),
+    daFgcClaims({ exp: IAT + 600, jti: JTI.daOutlives }),
+  ),
+});
+
+fixture("da-compact-delegator-mismatch", {
+  description:
+    "The spec repo's da-v1.fgc.jwt unchanged (act.sub orders-reader), presented with a delegator token that is NOT its delegator: a CGT minted here for audit-bot carrying the same scope, trust_class and authorization_details as the §4.7 grant. §5.3 defines act as the delegating agent ({sub: delegator DID}) and §5.4 checks each DA against its immediate delegator, so a supplied token whose sub is not the DA's act.sub is not that delegator and re-checks nothing. Both tokens carry valid signatures and schema-valid claims, the presenter proof (agent-key-2) is valid, and every attenuation member would pass against this grant; the linkage is the sole defect. Verifier MUST REJECT with DELEGATOR_INVALID.",
+  fixtureType: "da",
+  tokenForm: "compact",
+  spec: [ref("§5.3 Assertion Form (act: the delegating agent)"), ref("§5.4 Attenuation (each DA against its immediate delegator)"), { id: "RFC 8693", ref: "https://datatracker.ietf.org/doc/html/rfc8693", section: "§4.1 (act)" }],
+  verifierState: state(["broker-key-1"]),
+  delegation: {
+    delegatorToken: mintCompact(
+      "broker-key-1",
+      compactHeader("broker-key-1"),
+      cgtFgcClaims({ sub: AUDIT_BOT_DID, jti: JTI.cgtAuditBot }),
+    ),
+  },
+  presentation: presenterProof("agent-key-2", JTI.daFgc),
+  expected: { verifyResult: "REJECT", rejectCategory: "DELEGATOR_INVALID", reasonContains: "act.sub" },
+  schemaValid: true,
+  headerSchemaValid: true,
+  token: DA_FGC_TOKEN,
+});
+
+fixture("cgt-compact-crit-names-absent-claim", {
+  description:
+    "The §4.7 CGT claim set without cnf, while aap_crit still names authorization_details and cnf. §4.5: a verifier MUST reject a token whose aap_crit names a claim that is not present in the token (the vendored schema marks this a verifier check, so the claim set is schema-valid). No presentation is carried because the token binds no presenter. The signature and every other member are valid; the absent named claim is the sole defect. Verifier MUST REJECT with CRIT_NOT_UNDERSTOOD.",
+  fixtureType: "cgt",
+  tokenForm: "compact",
+  spec: [ref("§4.5 Mandatory to understand claims (aap_crit MUST NOT name an absent claim)")],
+  verifierState: state(["broker-key-1"]),
+  expected: { verifyResult: "REJECT", rejectCategory: "CRIT_NOT_UNDERSTOOD", reasonContains: "no such claim" },
+  schemaValid: true,
+  headerSchemaValid: true,
+  token: (() => {
+    const claims = cgtFgcClaims({ jti: JTI.critNamesAbsent });
+    delete claims.cnf;
+    return mintCompact("broker-key-1", compactHeader("broker-key-1"), claims);
+  })(),
+});
+
+fixture("cgt-compact-crit-empty", {
+  description:
+    "The §4.2 baseline CGT claim set plus aap_crit: [] and nothing else. §4.5: a verifier MUST reject a token whose aap_crit is present but empty; the vendored cgt-claims-v1 schema pins it as minItems 1, so the claim set is schema-invalid. The signature is valid; the empty array is the sole defect. Verifier MUST REJECT with CLAIM_SCHEMA.",
+  fixtureType: "cgt",
+  tokenForm: "compact",
+  spec: [ref("§4.5 Mandatory to understand claims (aap_crit present but empty)"), ref("§4.2 Token Structure")],
+  verifierState: state(["broker-key-1"]),
+  expected: { verifyResult: "REJECT", rejectCategory: "CLAIM_SCHEMA", reasonContains: "aap_crit" },
+  schemaValid: false,
+  headerSchemaValid: true,
+  token: (() => {
+    // aap_crit sits where the 0.5 members sit (§4.7): before the validity window.
+    const { iat, exp, jti, ...head } = cgtClaims({ jti: JTI.critEmpty });
+    return mintCompact("broker-key-1", compactHeader("broker-key-1"), { ...head, aap_crit: [], iat, exp, jti });
+  })(),
+});
+
+fixture("cgt-compact-cnf-no-proof", {
+  description:
+    "Byte-identical to cgt-compact-fgc-valid (the spec repo's cgt-v1.fgc.jwt, cnf bound to agent-key-1) presented with NO presenter proof (no presentation member). §4.6: a verifier that receives a token with cnf MUST verify the presenter's proof against the bound key and MUST reject the token otherwise — a verifier that treats a missing proof as nothing to verify accepts the token as a bearer token, the downgrade §4.5 lists cnf to prevent. The token signature is valid; the absent proof is the sole defect. Verifier MUST REJECT with CNF_MISMATCH.",
+  fixtureType: "cgt",
+  tokenForm: "compact",
+  spec: [ref("§4.6 Proof of possession (MUST reject the token otherwise)"), ref("§8.6 Presentation is not possession"), BROKER_PROFILE_6_8, RFC7800],
+  verifierState: state(["broker-key-1"]),
+  expected: { verifyResult: "REJECT", rejectCategory: "CNF_MISMATCH", reasonContains: "proof" },
+  schemaValid: true,
+  headerSchemaValid: true,
+  token: CGT_FGC_TOKEN,
+});
+
+fixture("da-compact-trust-class-widened", {
+  description:
+    "The §5.3 DA claim set (the shape of da-v1.jwt) with trust_class orders:write against the delegator cgt-v1.jwt, whose trust_class is orders:read. §5.3: the delegatee's scope and trust_class MUST be equal to or a subset of the delegator's; a different trust class is a capability the delegator does not hold. scope (orders.read) is a subset, the validity window equals the delegator's, max_depth is 1, the signature is valid, and no authorization_details is carried so no §4.4 reading is involved; the trust class is the sole defect. Verifier MUST REJECT with SCOPE_NOT_SUBSET.",
+  fixtureType: "da",
+  tokenForm: "compact",
+  spec: [ref("§5.3 Assertion Form (scope and trust_class equal to or a subset of the delegator's)"), ref("§5.1 Purpose (scope cannot exceed the delegator's)")],
+  verifierState: state(["broker-key-1"]),
+  delegation: { delegatorToken: CGT_TOKEN },
+  expected: { verifyResult: "REJECT", rejectCategory: "SCOPE_NOT_SUBSET", reasonContains: "trust_class" },
+  schemaValid: true,
+  headerSchemaValid: true,
+  token: mintCompact(
+    "broker-key-1",
+    compactHeader("broker-key-1"),
+    daClaims({ trust_class: "orders:write", jti: JTI.daTrustClass }),
+  ),
+});
+
+// A delegator DA at max_depth 2 (orders-reader -> reporting-bot), minted here:
+// the spec publishes no DA above depth 1.
+const DA_DEPTH_TWO_TOKEN = mintCompact(
+  "broker-key-1",
+  compactHeader("broker-key-1"),
+  daClaims({ max_depth: 2, jti: JTI.daDepthTwo }),
+);
+
+fixture("da-compact-depth-exceeds-remaining", {
+  description:
+    "A DA delegated from a delegator DA at max_depth 2 (reporting-bot, minted here) onward to audit-bot, claiming max_depth 2 itself. §5.3: max_depth is the remaining delegation depth BELOW an assertion, so a DA one link below a depth-2 delegator may carry at most 1; claiming 2 would hand the delegatee as much remaining depth as its delegator held. act nests the chain (act.sub reporting-bot, act.act.sub orders-reader), scope, trust_class and the validity window equal the delegator's, no authorization_details is carried, the signature is valid; the depth is the sole defect. Verifier MUST REJECT with NOT_ATTENUATED.",
+  fixtureType: "da",
+  tokenForm: "compact",
+  spec: [ref("§5.3 Assertion Form (max_depth: remaining delegation depth below this assertion)"), ref("§5.4 Attenuation (checked link by link)"), { id: "RFC 8693", ref: "https://datatracker.ietf.org/doc/html/rfc8693", section: "§4.1 (nested act)" }],
+  verifierState: state(["broker-key-1"]),
+  delegation: { delegatorToken: DA_DEPTH_TWO_TOKEN },
+  expected: { verifyResult: "REJECT", rejectCategory: "NOT_ATTENUATED", reasonContains: "max_depth" },
+  schemaValid: true,
+  headerSchemaValid: true,
+  token: mintCompact(
+    "broker-key-1",
+    compactHeader("broker-key-1"),
+    daClaims({
+      sub: AUDIT_BOT_DID,
+      act: { sub: DELEGATEE_DID, act: { sub: AGENT_DID } },
+      max_depth: 2,
+      delegator_atx: REPORTING_BOT_ATX,
+      jti: JTI.daExceedsRemaining,
+    }),
+  ),
+});
+
+fixture("da-compact-depth-exceeds-peer-cap", {
+  description:
+    "The spec repo's da-v1.fgc.jwt unchanged (reporting-bot, max_depth 1) with a minted delegator: the §4.7 grant for orders-reader plus a peer_agent entry whose peerDid is reporting-bot with subDelegationDepth 0 (the peer may not delegate onward). §5.3/§5.4: a DA's max_depth MUST NOT exceed the subDelegationDepth of the delegator's peer_agent entry whose peerDid is the DA's sub, when such an entry exists. The DA's data and budget entries are narrower than the delegator's (as in da-compact-fgc-valid), scope, trust_class and the validity window are equal, and the presenter proof (agent-key-2) is valid; the peer cap is the sole defect. Verifier MUST REJECT with NOT_ATTENUATED.",
+  fixtureType: "da",
+  tokenForm: "compact",
+  spec: [ref("§5.3 Assertion Form (max_depth MUST NOT exceed the delegator's peer_agent subDelegationDepth)"), ref("§5.4 Attenuation"), ref("§4.4.1 Entry type registry (peer_agent)")],
+  verifierState: state(["broker-key-1"]),
+  delegation: {
+    delegatorToken: mintCompact(
+      "broker-key-1",
+      compactHeader("broker-key-1"),
+      cgtFgcClaims({
+        authorization_details: [
+          ...cgtAuthorizationDetails(),
+          { type: `${TYPE_URI}peer_agent`, peerDid: DELEGATEE_DID, direction: ["outbound"], subDelegationDepth: 0 },
+        ],
+        jti: JTI.cgtPeerCap,
+      }),
+    ),
+  },
+  presentation: presenterProof("agent-key-2", JTI.daFgc),
+  expected: { verifyResult: "REJECT", rejectCategory: "NOT_ATTENUATED", reasonContains: "subDelegationDepth" },
+  schemaValid: true,
+  headerSchemaValid: true,
+  token: DA_FGC_TOKEN,
+});
+
+fixture("cgt-hybrid-missing-mldsa65", {
+  description:
+    "The spec repo's hybrid CGT (cgt-v1.hybrid.general.json) with its declared ML-DSA-65 entry stripped: the payload and the Ed25519 entry (broker-key-1) are the published bytes unchanged, and that entry verifies. The verifier's path policy (verifierState.requiredSuites) pins the §8.2 hybrid profile for this path — EdDSA and ML-DSA-65 — and §9.4 requires every declared entry to verify: a hybrid token stripped to one family MUST NOT degrade to single-family acceptance. Without the policy an Ed25519-only general-form token is a legal co-signature form, so the policy is what makes the stripped entry visible. Verifier MUST REJECT with HYBRID_INCOMPLETE.",
+  fixtureType: "cgt",
+  tokenForm: "general",
+  spec: [ref("§9.4 Multi-Signature Form (family signature gate)"), ref("§8.2 Cryptographic Agility (no fallback to classical-only on a hybrid path)"), RFC8032, RFC9964],
+  verifierState: { ...state(["broker-key-1", "broker-pqc-1"]), requiredSuites: ["EdDSA", "ML-DSA-65"] },
+  expected: { verifyResult: "REJECT", rejectCategory: "HYBRID_INCOMPLETE", reasonContains: "ML-DSA-65" },
+  schemaValid: true,
+  tokenGeneral: { payload: CGT_HYBRID.payload, signatures: [CGT_HYBRID.signatures[0]] },
 });
 
 // --- write ----------------------------------------------------------------------

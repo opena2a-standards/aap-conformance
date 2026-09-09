@@ -1,0 +1,38 @@
+{
+  "$schema": "https://aap.opena2a.org/schemas/fixture-v1.json",
+  "name": "aap-v1/cgt-compact-crit-names-absent-claim",
+  "description": "The §4.7 CGT claim set without cnf, while aap_crit still names authorization_details and cnf. §4.5: a verifier MUST reject a token whose aap_crit names a claim that is not present in the token (the vendored schema marks this a verifier check, so the claim set is schema-valid). No presentation is carried because the token binds no presenter. The signature and every other member are valid; the absent named claim is the sole defect. Verifier MUST REJECT with CRIT_NOT_UNDERSTOOD.",
+  "fixtureType": "cgt",
+  "tokenForm": "compact",
+  "spec": [
+    {
+      "id": "AAP",
+      "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+      "section": "§4.5 Mandatory to understand claims (aap_crit MUST NOT name an absent claim)"
+    }
+  ],
+  "verifierState": {
+    "clockNumericDate": 1780315230,
+    "keys": [
+      {
+        "kid": "broker-key-1",
+        "publicJwk": {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "ebVWLo_mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ",
+          "kid": "broker-key-1",
+          "use": "sig",
+          "alg": "EdDSA"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "verifyResult": "REJECT",
+    "rejectCategory": "CRIT_NOT_UNDERSTOOD",
+    "reasonContains": "no such claim"
+  },
+  "schemaValid": true,
+  "headerSchemaValid": true,
+  "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImJyb2tlci1rZXktMSJ9.eyJpc3MiOiJodHRwczovL2Jyb2tlci5hY21lLmV4YW1wbGUiLCJzdWIiOiJkaWQ6b3BlbmEyYTphZ2VudDphY21lL29yZGVycy1yZWFkZXIiLCJhdWQiOiJodHRwczovL2FwaS5vcmRlcnMuaW50ZXJuYWwiLCJzY29wZSI6Im9yZGVycy5yZWFkIiwidHJ1c3RfY2xhc3MiOiJvcmRlcnM6cmVhZCIsImlzc3Vlcl9jaGFpbiI6WyJkaWQ6b3BlbmEyYTphdXRob3JpdHk6b3BlbmEyYS5vcmciXSwidHJ1c3RfbGV2ZWwiOjQsImF1dGhvcml6YXRpb25fZGV0YWlscyI6W3sidHlwZSI6Imh0dHBzOi8vc3BlY3Mub3BlbmEyYS5vcmcvYWFwL3R5cGVzL2RhdGEiLCJsb2NhdGlvbnMiOlsiaHR0cHM6Ly9hcGkub3JkZXJzLmludGVybmFsL29yZGVycyJdLCJhY3Rpb25zIjpbInJlYWQiXSwiZmllbGRzQWxsb3dlZCI6WyJpZCIsInN0YXR1cyIsInRvdGFsIl0sImZpZWxkc0RlbmllZCI6WyJjdXN0b21lci5lbWFpbCJdLCJsYWJlbENlaWxpbmciOlsiaW50ZXJuYWwiXX0seyJ0eXBlIjoiaHR0cHM6Ly9zcGVjcy5vcGVuYTJhLm9yZy9hYXAvdHlwZXMvYnVkZ2V0IiwibWF4VXNlcyI6MTAwLCJyYXRlIjp7Im1heCI6NjAsIndpbmRvd1NlY29uZHMiOjYwfX1dLCJhYXBfY3JpdCI6WyJhdXRob3JpemF0aW9uX2RldGFpbHMiLCJjbmYiXSwiaWF0IjoxNzgwMzE1MjAwLCJleHAiOjE3ODAzMTU1MDAsImp0aSI6IjFhMmIzYzRkNWU2ZjcwODE5MjAzMTQyNTM2NDc1ODY5In0.G1gtWXpmT2Fc8zA_mTVM094eMsM8SO5dSWf7VrrlGzPzX9NxEwFrC5ADWg5VJ24xMheOmeQuPOZSGSylOJFeBA"
+}

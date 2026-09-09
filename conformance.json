@@ -4,7 +4,7 @@
   "spec": {
     "id": "AAP",
     "name": "Agent Authorization Protocol",
-    "version": "0.4.0-draft",
+    "version": "0.5.0-draft",
     "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md"
   },
   "fixtureManifest": "MANIFEST.sha256",
@@ -30,8 +30,36 @@
       "reason": "runtime protocol flows, not token wire form; grant-reference-v1 is validated against the broker-profile ABNF in the spec repo's own CI"
     },
     {
-      "specSection": "§8.3 intent verification and the optional CGT FGA members",
+      "specSection": "§8.3 intent verification and the optional-to-ignore CGT members (intent_verified, context_required, the deprecated fga_constraints and max_uses)",
       "reason": "optional-to-ignore per the broker profile; the v1 reference does not mint them — the schemas accept them, but no fixture pins their semantics"
+    },
+    {
+      "specSection": "§4.4 narrowing rule between authorization_details and the scope string",
+      "reason": "the mapping from an OAuth scope string to the locations and actions it permits is deployment-defined, so the intersection is not mechanical from the token alone; the suite pins the §5.4 attenuation relation, which is mechanical"
+    },
+    {
+      "specSection": "§4.6 presentation bindings other than the signed challenge (local socket peer credentials, RFC 9421 HTTP message signatures), and the channel properties of the signed challenge itself",
+      "reason": "the OS and HTTP bindings of broker profile §6.8 are runtime channel properties; the suite models the A2A/MCP signed-challenge row deterministically and pins cnf against it (key binding by RFC 7638 thumbprint and the signature over the challenge); channel binding, freshness and single use of the challenge are broker state and not exercised"
+    },
+    {
+      "specSection": "§7.3 grant revocation list",
+      "reason": "broker runtime state (a local list checked at resolution), not token wire form"
+    },
+    {
+      "specSection": "§4.5 producer rule: aap_crit MUST NOT name a §4.2 baseline claim",
+      "reason": "a producer MUST NOT with no verifier MUST; the verifiers reject such a name only as a name they do not implement, and no fixture pins the producer rule"
+    },
+    {
+      "specSection": "§5.4 a DA that omits authorization_details while its delegator carries some",
+      "reason": "the spec's mechanical text quantifies over the entries a DA carries and is vacuous over an absent claim, so the verifiers pass it; §4.4 reads a token without the claim as an unconstrained baseline token, which would carry more than the delegator's grant — a spec text gap, pending a spec sentence before a fixture pins it"
+    },
+    {
+      "specSection": "§5.4 member kinds and §4.4.1 entry types no fixture exercises (identity, deny set, bound incl. spend/rate/tokenCap, restriction flags, constraint objects; mcp_tool, skill, peer_agent, model, network incl. *. destination coverage)",
+      "reason": "implemented in both verifiers, not pinned; what IS exercised is the allow set member kind on a data entry (fieldsAllowed, rejected when widened), the §5.5 data and budget entries accepted as narrower than the §4.7 grant, and max_depth"
+    },
+    {
+      "specSection": "§5.4 start-of-window ordering (DA iat vs delegator iat)",
+      "reason": "not stated by the spec; bounded only by the family clock-skew bound (ATP §10.2 via broker profile §6 step 2), so it is not a verifier rule here — only the end of the window (exp) is checked and pinned"
     }
   ],
   "requirements": [
@@ -86,6 +114,32 @@
       ],
       "expected": "REJECT[CLAIM_SCHEMA]",
       "description": "A BAC declaring bac_level 3 without drift_score. Levels are cumulative (§6.2/§6.4): L3 requires binary_hash, drift_score, anomaly_state, and intent_verified; the other three are present, drift_score is the sole omission. Verifier MUST REJECT with CLAIM_SCHEMA."
+    },
+    {
+      "fixture": "fixtures/bac-compact-session-valid.json",
+      "name": "aap-v1/bac-compact-session-valid",
+      "fixtureType": "bac",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§6.5 Example with a session label"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§6.4 Claim Set (session_label, L3 only)"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§4.4.2 Label semantics"
+        }
+      ],
+      "expected": "ACCEPT",
+      "description": "The spec repo's generated 0.5 BAC (examples/tokens/bac-v1.session.jwt, AAP-SPEC §6.5): the L3 attestation carrying session_label [internal] — the set of labels the session has admitted so far (§4.4.2) — with the 60-second window unchanged. Verifier MUST ACCEPT."
     },
     {
       "fixture": "fixtures/bac-compact-ttl-exceeded.json",
@@ -166,6 +220,120 @@
       "description": "The §4.2 CGT claim set with a header declaring kid broker-key-1, but the signature was produced by broker-key-2. The claims are schema-valid and unexpired; the signature is the sole defect. Verifier MUST REJECT with BAD_SIGNATURE."
     },
     {
+      "fixture": "fixtures/cgt-compact-cnf-mismatch.json",
+      "name": "aap-v1/cgt-compact-cnf-mismatch",
+      "fixtureType": "cgt",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§4.6 Proof of possession"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§8.6 Presentation is not possession"
+        },
+        {
+          "id": "AAP-BROKER-PROFILE",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-BROKER-PROFILE.md",
+          "section": "§6.8 Presentation binding (signed challenge)"
+        },
+        {
+          "id": "RFC 7800",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc7800",
+          "section": "Proof-of-Possession Key Semantics for JWTs (the cnf claim)"
+        },
+        {
+          "id": "RFC 7638",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc7638",
+          "section": "JSON Web Key (JWK) Thumbprint (the jkt confirmation method, RFC 9449 §6.1)"
+        }
+      ],
+      "expected": "REJECT[CNF_MISMATCH]",
+      "description": "Byte-identical to cgt-compact-fgc-valid (the spec repo's cgt-v1.fgc.jwt, cnf bound to agent-key-1); only the presentation differs — the signed-challenge proof is produced by agent-key-2, whose RFC 7638 thumbprint is not the token's cnf.jkt. §4.6: a verifier that receives a token with cnf MUST verify the presenter's proof against the bound key and MUST reject the token otherwise. The token signature is valid; the presenter binding is the sole defect. Verifier MUST REJECT with CNF_MISMATCH."
+    },
+    {
+      "fixture": "fixtures/cgt-compact-cnf-no-proof.json",
+      "name": "aap-v1/cgt-compact-cnf-no-proof",
+      "fixtureType": "cgt",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§4.6 Proof of possession (MUST reject the token otherwise)"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§8.6 Presentation is not possession"
+        },
+        {
+          "id": "AAP-BROKER-PROFILE",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-BROKER-PROFILE.md",
+          "section": "§6.8 Presentation binding (signed challenge)"
+        },
+        {
+          "id": "RFC 7800",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc7800",
+          "section": "Proof-of-Possession Key Semantics for JWTs (the cnf claim)"
+        }
+      ],
+      "expected": "REJECT[CNF_MISMATCH]",
+      "description": "Byte-identical to cgt-compact-fgc-valid (the spec repo's cgt-v1.fgc.jwt, cnf bound to agent-key-1) presented with NO presenter proof (no presentation member). §4.6: a verifier that receives a token with cnf MUST verify the presenter's proof against the bound key and MUST reject the token otherwise — a verifier that treats a missing proof as nothing to verify accepts the token as a bearer token, the downgrade §4.5 lists cnf to prevent. The token signature is valid; the absent proof is the sole defect. Verifier MUST REJECT with CNF_MISMATCH."
+    },
+    {
+      "fixture": "fixtures/cgt-compact-cnf-unlisted.json",
+      "name": "aap-v1/cgt-compact-cnf-unlisted",
+      "fixtureType": "cgt",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§4.5 Mandatory to understand claims (cnf MUST be listed)"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§4.6 Proof of possession"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§8.6 Presentation is not possession"
+        }
+      ],
+      "expected": "REJECT[CRIT_UNLISTED]",
+      "description": "The §4.7 CGT claim set with aap_crit naming only authorization_details while cnf is present. §4.5: cnf MUST be listed whenever it is present, because a verifier that ignores cnf accepts the token as a bearer token — the downgrade §4.6 exists to prevent. The signature and the presenter proof (agent-key-1) are valid; the missing aap_crit entry is the sole defect. Verifier MUST REJECT with CRIT_UNLISTED."
+    },
+    {
+      "fixture": "fixtures/cgt-compact-crit-empty.json",
+      "name": "aap-v1/cgt-compact-crit-empty",
+      "fixtureType": "cgt",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§4.5 Mandatory to understand claims (aap_crit present but empty)"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§4.2 Token Structure"
+        }
+      ],
+      "expected": "REJECT[CLAIM_SCHEMA]",
+      "description": "The §4.2 baseline CGT claim set plus aap_crit: [] and nothing else. §4.5: a verifier MUST reject a token whose aap_crit is present but empty; the vendored cgt-claims-v1 schema pins it as minItems 1, so the claim set is schema-invalid. The signature is valid; the empty array is the sole defect. Verifier MUST REJECT with CLAIM_SCHEMA."
+    },
+    {
       "fixture": "fixtures/cgt-compact-crit-header.json",
       "name": "aap-v1/cgt-compact-crit-header",
       "fixtureType": "cgt",
@@ -185,6 +353,69 @@
       ],
       "expected": "REJECT[UNKNOWN_HEADER_PARAM]",
       "description": "A CGT whose protected header carries crit: [\"aap_ver\"]. v1 headers are CLOSED (§9.2): a verifier MUST reject unknown header parameters, including crit — RFC 7515 §4.1.11 crit processing is exactly the extension channel a closed v1 header refuses. The signature is a valid Ed25519 signature over these exact header bytes. Verifier MUST REJECT with UNKNOWN_HEADER_PARAM."
+    },
+    {
+      "fixture": "fixtures/cgt-compact-crit-names-absent-claim.json",
+      "name": "aap-v1/cgt-compact-crit-names-absent-claim",
+      "fixtureType": "cgt",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§4.5 Mandatory to understand claims (aap_crit MUST NOT name an absent claim)"
+        }
+      ],
+      "expected": "REJECT[CRIT_NOT_UNDERSTOOD]",
+      "description": "The §4.7 CGT claim set without cnf, while aap_crit still names authorization_details and cnf. §4.5: a verifier MUST reject a token whose aap_crit names a claim that is not present in the token (the vendored schema marks this a verifier check, so the claim set is schema-valid). No presentation is carried because the token binds no presenter. The signature and every other member are valid; the absent named claim is the sole defect. Verifier MUST REJECT with CRIT_NOT_UNDERSTOOD."
+    },
+    {
+      "fixture": "fixtures/cgt-compact-crit-unknown-entry-type.json",
+      "name": "aap-v1/cgt-compact-crit-unknown-entry-type",
+      "fixtureType": "cgt",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§4.4.1 Entry type registry (unknown type MUST reject)"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§4.5 Mandatory to understand claims"
+        },
+        {
+          "id": "RFC 9396",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc9396",
+          "section": "OAuth 2.0 Rich Authorization Requests (the authorization_details claim)"
+        }
+      ],
+      "expected": "REJECT[CRIT_NOT_UNDERSTOOD]",
+      "description": "The §4.7 CGT claim set with the data entry's type replaced by https://specs.opena2a.org/aap/types/payment — a type absent from the §4.4.1 entry type registry — while aap_crit names authorization_details. §4.4.1: a verifier that meets an entry type it does not implement MUST reject the token, because an unknown type inside a mandatory-to-understand claim is not understood. The signature, the presenter proof (agent-key-1) and every other member are valid; the entry type is the sole defect. Verifier MUST REJECT with CRIT_NOT_UNDERSTOOD."
+    },
+    {
+      "fixture": "fixtures/cgt-compact-crit-unsupported-claim.json",
+      "name": "aap-v1/cgt-compact-crit-unsupported-claim",
+      "fixtureType": "cgt",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§4.5 Mandatory to understand claims"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§9.6 Claim Conventions (unknown claims)"
+        }
+      ],
+      "expected": "REJECT[CRIT_NOT_UNDERSTOOD]",
+      "description": "The §4.7 CGT claim set plus a private claim x_tenant, with aap_crit naming authorization_details, cnf and x_tenant. §4.5: a verifier that encounters a name in aap_crit that it does not implement MUST reject the token — the reference verifiers implement authorization_details and cnf as mandatory to understand and nothing else. The claim set is schema-valid (unknown claims are optional to ignore unless named in aap_crit, §9.6), the signature and the presenter proof are valid; the unsupported aap_crit name is the sole defect. Verifier MUST REJECT with CRIT_NOT_UNDERSTOOD."
     },
     {
       "fixture": "fixtures/cgt-compact-duplicate-header-member.json",
@@ -227,6 +458,57 @@
       ],
       "expected": "REJECT[EXPIRED]",
       "description": "Byte-identical to cgt-compact-valid (the spec repo's cgt-v1.jwt; exp = iat + 300); only the pinned verifier clock differs — one second past exp. The signature IS valid; expiry is the sole defect. Verifier MUST REJECT with EXPIRED."
+    },
+    {
+      "fixture": "fixtures/cgt-compact-fgc-valid.json",
+      "name": "aap-v1/cgt-compact-fgc-valid",
+      "fixtureType": "cgt",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§4.7 Example with authorization details"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§4.4 Authorization details"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§4.5 Mandatory to understand claims"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§4.6 Proof of possession"
+        },
+        {
+          "id": "AAP-BROKER-PROFILE",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-BROKER-PROFILE.md",
+          "section": "§6.8 Presentation binding (signed challenge)"
+        },
+        {
+          "id": "RFC 9396",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc9396",
+          "section": "OAuth 2.0 Rich Authorization Requests (the authorization_details claim)"
+        },
+        {
+          "id": "RFC 7800",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc7800",
+          "section": "Proof-of-Possession Key Semantics for JWTs (the cnf claim)"
+        },
+        {
+          "id": "RFC 7638",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc7638",
+          "section": "JSON Web Key (JWK) Thumbprint (the jkt confirmation method, RFC 9449 §6.1)"
+        }
+      ],
+      "expected": "ACCEPT",
+      "description": "The spec repo's generated 0.5 CGT (examples/tokens/cgt-v1.fgc.jwt, AAP-SPEC §4.7): the §4.2 claim set plus authorization_details (one data entry, one budget entry, registry-URI types), aap_crit naming both mandatory-to-understand claims, and cnf bound by RFC 7638 thumbprint (jkt) to the presenter test key agent-key-1. The presentation carries agent-key-1's signed-challenge proof, so the presenter binding of §4.6 holds. Verifier MUST ACCEPT."
     },
     {
       "fixture": "fixtures/cgt-compact-jti-uppercase.json",
@@ -500,6 +782,37 @@
       "description": "A general-form CGT carrying ONLY an ML-DSA-65 entry (which verifies). A general-form token that declares any ML-DSA-65 entry is on the §8.2 hybrid profile and MUST carry at least one Ed25519 entry and at least one ML-DSA-65 entry — a stripped hybrid MUST NOT degrade to single-family acceptance (§9.4). Verifier MUST REJECT with HYBRID_INCOMPLETE."
     },
     {
+      "fixture": "fixtures/cgt-hybrid-missing-mldsa65.json",
+      "name": "aap-v1/cgt-hybrid-missing-mldsa65",
+      "fixtureType": "cgt",
+      "tokenForm": "general",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§9.4 Multi-Signature Form (family signature gate)"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§8.2 Cryptographic Agility (no fallback to classical-only on a hybrid path)"
+        },
+        {
+          "id": "RFC 8032",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc8032",
+          "section": "Ed25519 (published test-key seeds in vectors/test-keys.json)"
+        },
+        {
+          "id": "RFC 9964",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc9964",
+          "section": "ML-DSA for JOSE and COSE (the ML-DSA-65 alg and AKP key type)"
+        }
+      ],
+      "expected": "REJECT[HYBRID_INCOMPLETE]",
+      "description": "The spec repo's hybrid CGT (cgt-v1.hybrid.general.json) with its declared ML-DSA-65 entry stripped: the payload and the Ed25519 entry (broker-key-1) are the published bytes unchanged, and that entry verifies. The verifier's path policy (verifierState.requiredSuites) pins the §8.2 hybrid profile for this path — EdDSA and ML-DSA-65 — and §9.4 requires every declared entry to verify: a hybrid token stripped to one family MUST NOT degrade to single-family acceptance. Without the policy an Ed25519-only general-form token is a legal co-signature form, so the policy is what makes the stripped entry visible. Verifier MUST REJECT with HYBRID_INCOMPLETE."
+    },
+    {
       "fixture": "fixtures/cgt-hybrid-mldsa-bad-signature.json",
       "name": "aap-v1/cgt-hybrid-mldsa-bad-signature",
       "fixtureType": "cgt",
@@ -588,6 +901,208 @@
       "description": "The spec repo's generated PQ-interop CGT (examples/tokens/cgt-v1.mldsa65.jwt): a compact ML-DSA-65 JWT (RFC 9964 suite, FIPS 204 deterministic signature, empty context) with the §4.2 claim shape and its own jti, signed by broker-pqc-1 (RFC 9964 AKP test key). Verifier MUST ACCEPT."
     },
     {
+      "fixture": "fixtures/da-compact-authorization-details-widened.json",
+      "name": "aap-v1/da-compact-authorization-details-widened",
+      "fixtureType": "da",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§5.4 Attenuation (allow set members)"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§5.3 Assertion Form"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§5.1 Purpose (scope cannot exceed the delegator's)"
+        }
+      ],
+      "expected": "REJECT[NOT_ATTENUATED]",
+      "description": "The §5.5 DA claim set with the data entry's fieldsAllowed widened to [id, status, total, customer.name] against the §4.7 delegator grant, whose data entry allows [id, status, total]. §5.4: fieldsAllowed is an allow set member, so the delegatee's set MUST be a subset of the delegator's; an entry with no delegator entry it is narrower than or equal to makes the DA invalid. Scope, trust_class, the budget entry, max_depth and the presenter proof (agent-key-2) are all valid; the widened allow set is the sole defect. Verifier MUST REJECT with NOT_ATTENUATED."
+    },
+    {
+      "fixture": "fixtures/da-compact-delegator-mismatch.json",
+      "name": "aap-v1/da-compact-delegator-mismatch",
+      "fixtureType": "da",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§5.3 Assertion Form (act: the delegating agent)"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§5.4 Attenuation (each DA against its immediate delegator)"
+        },
+        {
+          "id": "RFC 8693",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc8693",
+          "section": "§4.1 (act)"
+        }
+      ],
+      "expected": "REJECT[DELEGATOR_INVALID]",
+      "description": "The spec repo's da-v1.fgc.jwt unchanged (act.sub orders-reader), presented with a delegator token that is NOT its delegator: a CGT minted here for audit-bot carrying the same scope, trust_class and authorization_details as the §4.7 grant. §5.3 defines act as the delegating agent ({sub: delegator DID}) and §5.4 checks each DA against its immediate delegator, so a supplied token whose sub is not the DA's act.sub is not that delegator and re-checks nothing. Both tokens carry valid signatures and schema-valid claims, the presenter proof (agent-key-2) is valid, and every attenuation member would pass against this grant; the linkage is the sole defect. Verifier MUST REJECT with DELEGATOR_INVALID."
+    },
+    {
+      "fixture": "fixtures/da-compact-depth-exceeds-peer-cap.json",
+      "name": "aap-v1/da-compact-depth-exceeds-peer-cap",
+      "fixtureType": "da",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§5.3 Assertion Form (max_depth MUST NOT exceed the delegator's peer_agent subDelegationDepth)"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§5.4 Attenuation"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§4.4.1 Entry type registry (peer_agent)"
+        }
+      ],
+      "expected": "REJECT[NOT_ATTENUATED]",
+      "description": "The spec repo's da-v1.fgc.jwt unchanged (reporting-bot, max_depth 1) with a minted delegator: the §4.7 grant for orders-reader plus a peer_agent entry whose peerDid is reporting-bot with subDelegationDepth 0 (the peer may not delegate onward). §5.3/§5.4: a DA's max_depth MUST NOT exceed the subDelegationDepth of the delegator's peer_agent entry whose peerDid is the DA's sub, when such an entry exists. The DA's data and budget entries are narrower than the delegator's (as in da-compact-fgc-valid), scope, trust_class and the validity window are equal, and the presenter proof (agent-key-2) is valid; the peer cap is the sole defect. Verifier MUST REJECT with NOT_ATTENUATED."
+    },
+    {
+      "fixture": "fixtures/da-compact-depth-exceeds-remaining.json",
+      "name": "aap-v1/da-compact-depth-exceeds-remaining",
+      "fixtureType": "da",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§5.3 Assertion Form (max_depth: remaining delegation depth below this assertion)"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§5.4 Attenuation (checked link by link)"
+        },
+        {
+          "id": "RFC 8693",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc8693",
+          "section": "§4.1 (nested act)"
+        }
+      ],
+      "expected": "REJECT[NOT_ATTENUATED]",
+      "description": "A DA delegated from a delegator DA at max_depth 2 (reporting-bot, minted here) onward to audit-bot, claiming max_depth 2 itself. §5.3: max_depth is the remaining delegation depth BELOW an assertion, so a DA one link below a depth-2 delegator may carry at most 1; claiming 2 would hand the delegatee as much remaining depth as its delegator held. act nests the chain (act.sub reporting-bot, act.act.sub orders-reader), scope, trust_class and the validity window equal the delegator's, no authorization_details is carried, the signature is valid; the depth is the sole defect. Verifier MUST REJECT with NOT_ATTENUATED."
+    },
+    {
+      "fixture": "fixtures/da-compact-fgc-valid.json",
+      "name": "aap-v1/da-compact-fgc-valid",
+      "fixtureType": "da",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§5.5 Example of an attenuated delegation"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§5.4 Attenuation"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§5.3 Assertion Form"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§4.6 Proof of possession"
+        },
+        {
+          "id": "AAP-BROKER-PROFILE",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-BROKER-PROFILE.md",
+          "section": "§6.8 Presentation binding (signed challenge)"
+        },
+        {
+          "id": "RFC 9396",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc9396",
+          "section": "OAuth 2.0 Rich Authorization Requests (the authorization_details claim)"
+        },
+        {
+          "id": "RFC 7800",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc7800",
+          "section": "Proof-of-Possession Key Semantics for JWTs (the cnf claim)"
+        }
+      ],
+      "expected": "ACCEPT",
+      "description": "The spec repo's generated 0.5 DA (examples/tokens/da-v1.fgc.jwt, AAP-SPEC §5.5): orders-reader delegates to reporting-bot with fewer fields (fieldsAllowed id, status) and a smaller budget (maxUses 10, rate.max 10) than the §4.7 grant, which the delegation context carries as the delegator token. Every entry is narrower than or equal to a delegator entry of the same type (§5.4), scope and trust_class are equal, max_depth 1, and cnf binds the delegatee's presenter key agent-key-2, whose signed-challenge proof is presented. Verifier MUST ACCEPT."
+    },
+    {
+      "fixture": "fixtures/da-compact-outlives-delegator.json",
+      "name": "aap-v1/da-compact-outlives-delegator",
+      "fixtureType": "da",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§5.4 Attenuation (a DA carries less than the delegator's grant)"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§4.2 Token Structure (iat/exp: the validity window)"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§5.3 Assertion Form"
+        }
+      ],
+      "expected": "REJECT[NOT_ATTENUATED]",
+      "description": "The §5.5 DA claim set with exp = iat + 600, later than the delegator's exp = iat + 300 (the §4.7 grant, carried as the delegator token). §5.4: a DA can only carry less than the delegator's grant, and iat/exp are the token's validity window (§4.2), so a DA that outlives its delegator carries authority after the delegator's has lapsed. The pinned clock (iat + 30) is inside both windows, the signature, the presenter proof (agent-key-2), scope, trust_class, authorization_details and max_depth are all valid; the later exp is the sole defect. Verifier MUST REJECT with NOT_ATTENUATED."
+    },
+    {
+      "fixture": "fixtures/da-compact-past-terminal-depth.json",
+      "name": "aap-v1/da-compact-past-terminal-depth",
+      "fixtureType": "da",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§5.3 Assertion Form (max_depth: 0 is a terminal delegation)"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§5.4 Attenuation (checked link by link)"
+        },
+        {
+          "id": "RFC 8693",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc8693",
+          "section": "§4.1 (nested act)"
+        }
+      ],
+      "expected": "REJECT[NOT_ATTENUATED]",
+      "description": "A DA delegated FROM a terminal delegation: the delegator token is the depth-0 DA of da-compact-terminal-depth-zero (reporting-bot, max_depth 0), and this DA delegates onward to audit-bot with act nesting the chain (act.sub reporting-bot, act.act.sub orders-reader) and max_depth 0. §5.3: max_depth is the remaining delegation depth below an assertion and 0 is terminal, so no delegation below it is permitted. Scope, trust_class and the validity window equal the delegator's; the depth is the sole defect. Verifier MUST REJECT with NOT_ATTENUATED."
+    },
+    {
       "fixture": "fixtures/da-compact-scope-superset.json",
       "name": "aap-v1/da-compact-scope-superset",
       "fixtureType": "da",
@@ -607,6 +1122,48 @@
       ],
       "expected": "REJECT[SCOPE_NOT_SUBSET]",
       "description": "A DA whose scope (orders.read orders.write) is a SUPERSET of the delegator's CGT scope (orders.read) — delegation widened authority. §5.2: the delegatee scope MUST be a subset of the delegator's scope; the minting broker enforces it and verifiers re-check it. Both tokens carry valid signatures and schema-valid claims; the subset relation is the sole defect. Verifier MUST REJECT with SCOPE_NOT_SUBSET."
+    },
+    {
+      "fixture": "fixtures/da-compact-terminal-depth-zero.json",
+      "name": "aap-v1/da-compact-terminal-depth-zero",
+      "fixtureType": "da",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§5.3 Assertion Form (max_depth >= 0; 0 is a terminal delegation)"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§5.2 Constraints"
+        }
+      ],
+      "expected": "ACCEPT",
+      "description": "A DA with max_depth 0 — a terminal delegation (§5.3: max_depth is an integer >= 0 and 0 is expressible; the 0.5 da-claims-v1 schema lowers the floor from 1 to 0). Delegator is the spec repo's cgt-v1.jwt; scope and trust_class are equal and the validity window is the delegator's. Minted here (the spec repo publishes no depth-0 example). A verifier that still floors max_depth at 1 wrongly rejects it. Verifier MUST ACCEPT."
+    },
+    {
+      "fixture": "fixtures/da-compact-trust-class-widened.json",
+      "name": "aap-v1/da-compact-trust-class-widened",
+      "fixtureType": "da",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§5.3 Assertion Form (scope and trust_class equal to or a subset of the delegator's)"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§5.1 Purpose (scope cannot exceed the delegator's)"
+        }
+      ],
+      "expected": "REJECT[SCOPE_NOT_SUBSET]",
+      "description": "The §5.3 DA claim set (the shape of da-v1.jwt) with trust_class orders:write against the delegator cgt-v1.jwt, whose trust_class is orders:read. §5.3: the delegatee's scope and trust_class MUST be equal to or a subset of the delegator's; a different trust class is a capability the delegator does not hold. scope (orders.read) is a subset, the validity window equals the delegator's, max_depth is 1, the signature is valid, and no authorization_details is carried so no §4.4 reading is involved; the trust class is the sole defect. Verifier MUST REJECT with SCOPE_NOT_SUBSET."
     },
     {
       "fixture": "fixtures/da-compact-valid.json",

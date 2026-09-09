@@ -1,28 +1,29 @@
 # aap-conformance
 
 Conformance fixtures and reference verifiers for the
-[Agent Authorization Protocol (AAP) 0.3.0-draft](https://github.com/opena2a-standards/agent-authorization-protocol)
+[Agent Authorization Protocol (AAP) 0.5.0-draft](https://github.com/opena2a-standards/agent-authorization-protocol)
 token canonical form (AAP-SPEC §9: JWTs over JWS — serialization IS
 canonicalization).
 
 Each fixture is a byte-stable JSON file that bundles a pinned AAP token
 (AIT, CGT, DA, or BAC; compact or JWS General JSON Serialization) with
-verifier configuration (a fixed clock and trusted keys) and an expected
-outcome (ACCEPT or REJECT with a pinned reject category). Two
-SDK-independent reference verifiers (Node and Python) walk the fixture set
-and report PASS or FAIL per vector. Fixture bytes are pinned in
-[`MANIFEST.sha256`](./MANIFEST.sha256).
+verifier configuration (a fixed clock, trusted keys, and where the fixture
+needs them a path suite policy, the delegator's token, and the presenter's
+proof) and an expected outcome (ACCEPT or REJECT with a pinned reject
+category). Two SDK-independent reference verifiers (Node and Python) walk
+the fixture set and report PASS or FAIL per vector. Fixture bytes are pinned
+in [`MANIFEST.sha256`](./MANIFEST.sha256).
 
 Run it:
 
 ```bash
 npm install   # @noble/post-quantum, for the ML-DSA-65 fixtures (RFC 9964)
 node verifiers/node/verify.mjs fixtures
-# summary: 24 pass, 0 fail (24 fixtures)
+# summary: 43 pass, 0 fail (43 fixtures)
 
 pip install -r verifiers/python/requirements.txt
 python3 verifiers/python/verify.py fixtures
-# summary: 24 pass, 0 fail (24 fixtures)
+# summary: 43 pass, 0 fail (43 fixtures)
 ```
 
 The verifier pair is Node + Python deliberately (the
@@ -79,14 +80,57 @@ What this suite verifies:
 | AAP §6.4 must-reject: `bac_level` 3 without `drift_score` (cumulative levels) | `fixtures/bac-compact-l3-missing-drift-score.json` |
 | AAP §9.4 must-reject: one declared general-form entry does not verify (no subset acceptance) | `fixtures/cgt-general-one-bad-signature.json` |
 | AAP §5.2 must-reject: DA scope is a superset of the delegator's scope (structural token pair) | `fixtures/da-compact-scope-superset.json` |
+| AAP §4.7 CGT with `authorization_details`, `aap_crit` and `cnf` (jkt bound to presenter key `agent-key-1`), with the presenter's signed-challenge proof | `fixtures/cgt-compact-fgc-valid.json` |
+| AAP §5.5 attenuated DA (fewer fields, smaller budget than the §4.7 grant; `cnf` bound to `agent-key-2`) | `fixtures/da-compact-fgc-valid.json` |
+| AAP §6.5 L3 BAC with `session_label` | `fixtures/bac-compact-session-valid.json` |
+| AAP §5.3 terminal delegation (`max_depth` 0 is expressible and accepted) | `fixtures/da-compact-terminal-depth-zero.json` |
+| AAP §4.4.1 must-reject: `authorization_details` entry type outside the registry (not understood) | `fixtures/cgt-compact-crit-unknown-entry-type.json` |
+| AAP §4.5 must-reject: `aap_crit` names a claim the verifier does not implement | `fixtures/cgt-compact-crit-unsupported-claim.json` |
+| AAP §4.5 must-reject: `cnf` present but not named in `aap_crit` | `fixtures/cgt-compact-cnf-unlisted.json` |
+| AAP §4.6 must-reject: presenter proof from `agent-key-2` against a `cnf` bound to `agent-key-1` (token bytes identical to the valid fixture) | `fixtures/cgt-compact-cnf-mismatch.json` |
+| AAP §5.4 must-reject: DA `authorization_details` widened beyond the delegator's (`fieldsAllowed` not a subset) | `fixtures/da-compact-authorization-details-widened.json` |
+| AAP §5.3 must-reject: delegating past a terminal (`max_depth` 0) delegator | `fixtures/da-compact-past-terminal-depth.json` |
+| AAP §9.4/§8.2 must-reject: hybrid token with its declared ML-DSA-65 entry stripped, on a path whose policy requires both families | `fixtures/cgt-hybrid-missing-mldsa65.json` |
+| AAP §5.4 must-reject: DA whose `exp` is later than its delegator's (a DA carries less than the delegator's grant; `iat`/`exp` are the validity window, §4.2) | `fixtures/da-compact-outlives-delegator.json` |
+| AAP §5.3/§5.4 must-reject: supplied delegator token is not the DA's delegator (`sub` is not the DA's `act.sub`) | `fixtures/da-compact-delegator-mismatch.json` |
+| AAP §4.5 must-reject: `aap_crit` names a claim the token does not carry | `fixtures/cgt-compact-crit-names-absent-claim.json` |
+| AAP §4.5 must-reject: `aap_crit` present but empty (schema `minItems` 1) | `fixtures/cgt-compact-crit-empty.json` |
+| AAP §4.6 must-reject: token with `cnf` presented without a presenter proof (a verifier MUST reject the token otherwise) | `fixtures/cgt-compact-cnf-no-proof.json` |
+| AAP §5.3 must-reject: DA `trust_class` differs from its delegator's (equal to or a subset of the delegator's) | `fixtures/da-compact-trust-class-widened.json` |
+| AAP §5.3 must-reject: DA under a depth-2 delegator DA claims `max_depth` 2 (remaining depth below the delegator is 1) | `fixtures/da-compact-depth-exceeds-remaining.json` |
+| AAP §5.3/§5.4 must-reject: DA `max_depth` 1 above the delegator's `peer_agent` `subDelegationDepth` 0 for that delegatee (token bytes identical to the valid DA) | `fixtures/da-compact-depth-exceeds-peer-cap.json` |
 
 Each negative fixture is valid in every respect except the one defect it
 pins, so a verifier that skips that verification step (and only that step)
 wrongly ACCEPTs it. Expected outcomes pin the reject category
 (`MALFORMED_HEADER`, `UNKNOWN_HEADER_PARAM`, `UNKNOWN_ALG`, `BAD_SIGNATURE`,
-`CLAIM_SCHEMA`, `EXPIRED`, `TTL_WINDOW`, `SCOPE_NOT_SUBSET`), so rejecting
-for the wrong reason also fails. Both verifiers implement the same pinned
-check order, documented at the top of each verifier.
+`CLAIM_SCHEMA`, `CRIT_UNLISTED`, `CRIT_NOT_UNDERSTOOD`, `EXPIRED`,
+`TTL_WINDOW`, `CNF_MISMATCH`, `DELEGATOR_INVALID`, `SCOPE_NOT_SUBSET`,
+`NOT_ATTENUATED`, `HYBRID_INCOMPLETE`, `REPLAYED_JTI`), so rejecting for the wrong reason also
+fails. Both verifiers implement the same pinned check order, documented at
+the top of each verifier. AAP-SPEC names `REPLAYED_JTI` (§8.1) and
+`HYBRID_INCOMPLETE` (§9.4) as conformance categories; the other names are
+this suite's vocabulary for the rule each fixture cites.
+
+AAP-SPEC 0.5 coverage: `authorization_details` (§4.4, RFC 9396) with the
+§4.4.1 entry type registry, `aap_crit` (§4.5), `cnf` (§4.6, RFC 7800)
+verified against a presenter proof (and rejected without one), the §5.4
+attenuation relation over a DA's `authorization_details` together with
+`trust_class`, the end of the validity window (`exp`) and `max_depth` (a
+terminal, depth-0 delegation is accepted and delegating past it rejects),
+the L3 `session_label` (§6.4), and the §9.4 family signature gate under a
+per-path suite policy. Of the §5.4 relation, what the fixtures exercise is
+the allow set member kind on a `data` entry (`fieldsAllowed`, rejected when
+widened), the §5.5 `data` and `budget` entries accepted as narrower than the
+§4.7 grant, and `max_depth`; the other member kinds and entry types are
+implemented in both verifiers but not pinned (see the list below). The
+presenter proof is the suite's fixture-input model of the broker profile
+§6.8 signed-challenge binding, built deterministically (the challenge is
+SHA-256 of a fixed label; the proof is the presenter key's Ed25519 signature
+over those bytes and carries the presenter's public JWK, which the verifier
+binds to the token through its RFC 7638 thumbprint); channel binding,
+freshness and single use of the challenge are broker state and not
+exercised.
 
 Two parsing rules are load-bearing and deliberately asymmetric:
 
@@ -99,7 +143,7 @@ Two parsing rules are load-bearing and deliberately asymmetric:
   RFC 7519 §4 explicitly permits and which `JSON.parse` and Python
   `json.loads` implement identically.
 
-Post-quantum coverage (AAP-SPEC 0.4, RFC 9964): the suite carries real
+Post-quantum coverage (added with AAP-SPEC 0.4, RFC 9964): the suite carries real
 ML-DSA-65 signatures — a compact PQ-interop ACCEPT fixture, a hybrid
 Ed25519 + ML-DSA-65 General JSON ACCEPT fixture, hybrid negatives (either
 half's signature corrupted MUST reject; a stripped hybrid missing the
@@ -113,15 +157,44 @@ via Node ≥ 25). The verifiers take one PQ dependency each — `npm install`
 (@noble/post-quantum) for Node, `dilithium-py` for Python — Ed25519 stays on
 node:crypto / cryptography.
 
-What this suite does NOT verify (v0.2):
+What this suite does NOT verify:
 
 - §8.2 key exchange (hybrid X25519 + ML-KEM-768): transport key negotiation,
   not token wire form; ML-KEM has no final JOSE registration yet.
 - Broker-profile runtime behavior (CPI endpoints, grant references,
-  revocation propagation): protocol flows, not token wire form. The
-  grant-reference ABNF is validated in the spec repo's own CI.
-- §8.3 intent verification and the optional CGT FGA members: optional-to-
-  ignore; the v1 reference does not mint them.
+  revocation propagation, the §7.3 grant revocation list): protocol flows
+  and broker state, not token wire form. The grant-reference ABNF is
+  validated in the spec repo's own CI.
+- §8.3 intent verification and the optional-to-ignore CGT members
+  (`intent_verified`, `context_required`, the deprecated `fga_constraints`
+  and `max_uses`): the v1 reference does not mint them.
+- The §4.4 narrowing rule between `authorization_details` and the scope
+  string: the mapping from an OAuth scope string to the locations and
+  actions it permits is deployment-defined, so it is not mechanical from the
+  token alone. The §5.4 attenuation relation, which is mechanical, is pinned.
+- The §6.8 presentation bindings other than the signed challenge (local
+  socket peer credentials, RFC 9421 HTTP message signatures), and the
+  channel properties of the signed challenge itself: channel binding,
+  freshness and single use of the challenge are broker state and not
+  exercised; the suite pins key binding (RFC 7638 thumbprint against `cnf`)
+  and the signature over the challenge.
+- The §4.5 producer rule that `aap_crit` MUST NOT name a §4.2 baseline
+  claim: a producer MUST NOT with no verifier MUST; the verifiers reject such
+  a name only as one they do not implement, and no fixture pins the rule.
+- §5.4 for a DA that omits `authorization_details` while its delegator
+  carries some: the spec's mechanical text quantifies over the entries a DA
+  carries and is vacuous over an absent claim, so the verifiers pass it,
+  while §4.4 reads a token without the claim as an unconstrained baseline
+  token. A spec text gap; a fixture follows the spec sentence.
+- §5.4 member kinds and §4.4.1 entry types no fixture exercises: identity,
+  deny set, bound (`spend`, `rate`, `tokenCap`), restriction flags and
+  constraint objects; `mcp_tool`, `skill`, `peer_agent`, `model` and
+  `network` (including `*.` destination coverage). Implemented in both
+  verifiers, not pinned.
+- §5.4 start-of-window ordering (DA `iat` against the delegator's `iat`):
+  not stated by the spec and bounded only by the family clock-skew bound
+  (ATP §10.2, via broker profile §6 step 2), so it is not a verifier rule
+  here; only the end of the window (`exp`) is checked and pinned.
 
 The full requirement-to-fixture mapping is machine-readable in
 [`conformance.json`](./conformance.json), regenerated from the fixtures by
@@ -134,7 +207,7 @@ CI-checked against drift.
 enforces every claim in this README on each push and pull request:
 
 1. Both reference verifiers run against `fixtures/` and must report
-   `17 pass, 0 fail`.
+   `43 pass, 0 fail`.
 2. Schema validation
    ([`scripts/schema_validation.py`](./scripts/schema_validation.py)): every
    fixture's decoded header/claims/container must match its DECLARED schema
@@ -161,9 +234,17 @@ enforces every claim in this README on each push and pull request:
 
 The fixtures are implementation-neutral: read a fixture, feed
 `token` (compact) or `tokenGeneral` (JWS General JSON Serialization) to your
-verifier configured with `verifierState.keys` (Ed25519 public JWKs) and
-`verifierState.clockNumericDate`, and compare your verdict with `expected`.
-For DA fixtures, `delegation.delegatorToken` carries the delegator's CGT for
-the §5.2 scope-subset re-check. A conforming verifier matches the expected
-verdict on all 17 fixtures — and rejects for the pinned reason, not just any
-reason.
+verifier configured with `verifierState.keys` (Ed25519 OKP and ML-DSA-65
+AKP public JWKs) and `verifierState.clockNumericDate`, and compare your
+verdict with `expected`. Where present, `verifierState.requiredSuites` is
+the path's suite policy (§8.2) for a general-form token;
+`delegation.delegatorToken` carries the immediate delegator's token (a CGT,
+or a DA deeper in a chain) for the §5.2-§5.4 re-check — it is the delegator
+only if its `sub` equals the DA's `act.sub` and, for a DA delegator, its
+`act` equals the DA's `act.act` (RFC 8693 §4.1); a token that is not that
+grant rejects `DELEGATOR_INVALID`, since checking it would re-check nothing;
+and `presentation.proof` carries the presenter's signed-challenge proof
+(`binding`, `challenge`, `jwk`, `signature`) for a token with `cnf`, which
+rejects `CNF_MISMATCH` when the proof is absent or does not bind. A
+conforming verifier matches the expected verdict on all 43 fixtures — and
+rejects for the pinned reason, not just any reason.
