@@ -145,6 +145,10 @@ const JTI = {
   cgtAuditBot: "091a2b3c4d5e6f708192031425364758",
   critNamesAbsent: "1a2b3c4d5e6f70819203142536475869",
   critEmpty: "2b3c4d5e6f7081920314253647586970",
+  daTrustClass: "3c4d5e6f708192031425364758697081",
+  daDepthTwo: "4d5e6f70819203142536475869708192",
+  daExceedsRemaining: "5e6f7081920314253647586970819203",
+  cgtPeerCap: "6f708192031425364758697081920314",
 };
 
 // AAP-SPEC §4.4.1: entry `type` values are URIs under the family prefix.
@@ -1124,6 +1128,83 @@ fixture("cgt-compact-cnf-no-proof", {
   schemaValid: true,
   headerSchemaValid: true,
   token: CGT_FGC_TOKEN,
+});
+
+fixture("da-compact-trust-class-widened", {
+  description:
+    "The §5.3 DA claim set (the shape of da-v1.jwt) with trust_class orders:write against the delegator cgt-v1.jwt, whose trust_class is orders:read. §5.3: the delegatee's scope and trust_class MUST be equal to or a subset of the delegator's; a different trust class is a capability the delegator does not hold. scope (orders.read) is a subset, the validity window equals the delegator's, max_depth is 1, the signature is valid, and no authorization_details is carried so no §4.4 reading is involved; the trust class is the sole defect. Verifier MUST REJECT with SCOPE_NOT_SUBSET.",
+  fixtureType: "da",
+  tokenForm: "compact",
+  spec: [ref("§5.3 Assertion Form (scope and trust_class equal to or a subset of the delegator's)"), ref("§5.1 Purpose (scope cannot exceed the delegator's)")],
+  verifierState: state(["broker-key-1"]),
+  delegation: { delegatorToken: CGT_TOKEN },
+  expected: { verifyResult: "REJECT", rejectCategory: "SCOPE_NOT_SUBSET", reasonContains: "trust_class" },
+  schemaValid: true,
+  headerSchemaValid: true,
+  token: mintCompact(
+    "broker-key-1",
+    compactHeader("broker-key-1"),
+    daClaims({ trust_class: "orders:write", jti: JTI.daTrustClass }),
+  ),
+});
+
+// A delegator DA at max_depth 2 (orders-reader -> reporting-bot), minted here:
+// the spec publishes no DA above depth 1.
+const DA_DEPTH_TWO_TOKEN = mintCompact(
+  "broker-key-1",
+  compactHeader("broker-key-1"),
+  daClaims({ max_depth: 2, jti: JTI.daDepthTwo }),
+);
+
+fixture("da-compact-depth-exceeds-remaining", {
+  description:
+    "A DA delegated from a delegator DA at max_depth 2 (reporting-bot, minted here) onward to audit-bot, claiming max_depth 2 itself. §5.3: max_depth is the remaining delegation depth BELOW an assertion, so a DA one link below a depth-2 delegator may carry at most 1; claiming 2 would hand the delegatee as much remaining depth as its delegator held. act nests the chain (act.sub reporting-bot, act.act.sub orders-reader), scope, trust_class and the validity window equal the delegator's, no authorization_details is carried, the signature is valid; the depth is the sole defect. Verifier MUST REJECT with NOT_ATTENUATED.",
+  fixtureType: "da",
+  tokenForm: "compact",
+  spec: [ref("§5.3 Assertion Form (max_depth: remaining delegation depth below this assertion)"), ref("§5.4 Attenuation (checked link by link)"), { id: "RFC 8693", ref: "https://datatracker.ietf.org/doc/html/rfc8693", section: "§4.1 (nested act)" }],
+  verifierState: state(["broker-key-1"]),
+  delegation: { delegatorToken: DA_DEPTH_TWO_TOKEN },
+  expected: { verifyResult: "REJECT", rejectCategory: "NOT_ATTENUATED", reasonContains: "max_depth" },
+  schemaValid: true,
+  headerSchemaValid: true,
+  token: mintCompact(
+    "broker-key-1",
+    compactHeader("broker-key-1"),
+    daClaims({
+      sub: AUDIT_BOT_DID,
+      act: { sub: DELEGATEE_DID, act: { sub: AGENT_DID } },
+      max_depth: 2,
+      delegator_atx: REPORTING_BOT_ATX,
+      jti: JTI.daExceedsRemaining,
+    }),
+  ),
+});
+
+fixture("da-compact-depth-exceeds-peer-cap", {
+  description:
+    "The spec repo's da-v1.fgc.jwt unchanged (reporting-bot, max_depth 1) with a minted delegator: the §4.7 grant for orders-reader plus a peer_agent entry whose peerDid is reporting-bot with subDelegationDepth 0 (the peer may not delegate onward). §5.3/§5.4: a DA's max_depth MUST NOT exceed the subDelegationDepth of the delegator's peer_agent entry whose peerDid is the DA's sub, when such an entry exists. The DA's data and budget entries are narrower than the delegator's (as in da-compact-fgc-valid), scope, trust_class and the validity window are equal, and the presenter proof (agent-key-2) is valid; the peer cap is the sole defect. Verifier MUST REJECT with NOT_ATTENUATED.",
+  fixtureType: "da",
+  tokenForm: "compact",
+  spec: [ref("§5.3 Assertion Form (max_depth MUST NOT exceed the delegator's peer_agent subDelegationDepth)"), ref("§5.4 Attenuation"), ref("§4.4.1 Entry type registry (peer_agent)")],
+  verifierState: state(["broker-key-1"]),
+  delegation: {
+    delegatorToken: mintCompact(
+      "broker-key-1",
+      compactHeader("broker-key-1"),
+      cgtFgcClaims({
+        authorization_details: [
+          ...cgtAuthorizationDetails(),
+          { type: `${TYPE_URI}peer_agent`, peerDid: DELEGATEE_DID, direction: ["outbound"], subDelegationDepth: 0 },
+        ],
+        jti: JTI.cgtPeerCap,
+      }),
+    ),
+  },
+  presentation: presenterProof("agent-key-2", JTI.daFgc),
+  expected: { verifyResult: "REJECT", rejectCategory: "NOT_ATTENUATED", reasonContains: "subDelegationDepth" },
+  schemaValid: true,
+  headerSchemaValid: true,
+  token: DA_FGC_TOKEN,
 });
 
 fixture("cgt-hybrid-missing-mldsa65", {

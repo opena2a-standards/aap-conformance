@@ -19,11 +19,11 @@ Run it:
 ```bash
 npm install   # @noble/post-quantum, for the ML-DSA-65 fixtures (RFC 9964)
 node verifiers/node/verify.mjs fixtures
-# summary: 40 pass, 0 fail (40 fixtures)
+# summary: 43 pass, 0 fail (43 fixtures)
 
 pip install -r verifiers/python/requirements.txt
 python3 verifiers/python/verify.py fixtures
-# summary: 40 pass, 0 fail (40 fixtures)
+# summary: 43 pass, 0 fail (43 fixtures)
 ```
 
 The verifier pair is Node + Python deliberately (the
@@ -96,6 +96,9 @@ What this suite verifies:
 | AAP §4.5 must-reject: `aap_crit` names a claim the token does not carry | `fixtures/cgt-compact-crit-names-absent-claim.json` |
 | AAP §4.5 must-reject: `aap_crit` present but empty (schema `minItems` 1) | `fixtures/cgt-compact-crit-empty.json` |
 | AAP §4.6 must-reject: token with `cnf` presented without a presenter proof (a verifier MUST reject the token otherwise) | `fixtures/cgt-compact-cnf-no-proof.json` |
+| AAP §5.3 must-reject: DA `trust_class` differs from its delegator's (equal to or a subset of the delegator's) | `fixtures/da-compact-trust-class-widened.json` |
+| AAP §5.3 must-reject: DA under a depth-2 delegator DA claims `max_depth` 2 (remaining depth below the delegator is 1) | `fixtures/da-compact-depth-exceeds-remaining.json` |
+| AAP §5.3/§5.4 must-reject: DA `max_depth` 1 above the delegator's `peer_agent` `subDelegationDepth` 0 for that delegatee (token bytes identical to the valid DA) | `fixtures/da-compact-depth-exceeds-peer-cap.json` |
 
 Each negative fixture is valid in every respect except the one defect it
 pins, so a verifier that skips that verification step (and only that step)
@@ -204,7 +207,7 @@ CI-checked against drift.
 enforces every claim in this README on each push and pull request:
 
 1. Both reference verifiers run against `fixtures/` and must report
-   `40 pass, 0 fail`.
+   `43 pass, 0 fail`.
 2. Schema validation
    ([`scripts/schema_validation.py`](./scripts/schema_validation.py)): every
    fixture's decoded header/claims/container must match its DECLARED schema
@@ -243,5 +246,5 @@ grant rejects `DELEGATOR_INVALID`, since checking it would re-check nothing;
 and `presentation.proof` carries the presenter's signed-challenge proof
 (`binding`, `challenge`, `jwk`, `signature`) for a token with `cnf`, which
 rejects `CNF_MISMATCH` when the proof is absent or does not bind. A
-conforming verifier matches the expected verdict on all 40 fixtures — and
+conforming verifier matches the expected verdict on all 43 fixtures — and
 rejects for the pinned reason, not just any reason.

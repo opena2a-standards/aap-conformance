@@ -953,6 +953,58 @@
       "description": "The spec repo's da-v1.fgc.jwt unchanged (act.sub orders-reader), presented with a delegator token that is NOT its delegator: a CGT minted here for audit-bot carrying the same scope, trust_class and authorization_details as the §4.7 grant. §5.3 defines act as the delegating agent ({sub: delegator DID}) and §5.4 checks each DA against its immediate delegator, so a supplied token whose sub is not the DA's act.sub is not that delegator and re-checks nothing. Both tokens carry valid signatures and schema-valid claims, the presenter proof (agent-key-2) is valid, and every attenuation member would pass against this grant; the linkage is the sole defect. Verifier MUST REJECT with DELEGATOR_INVALID."
     },
     {
+      "fixture": "fixtures/da-compact-depth-exceeds-peer-cap.json",
+      "name": "aap-v1/da-compact-depth-exceeds-peer-cap",
+      "fixtureType": "da",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§5.3 Assertion Form (max_depth MUST NOT exceed the delegator's peer_agent subDelegationDepth)"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§5.4 Attenuation"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§4.4.1 Entry type registry (peer_agent)"
+        }
+      ],
+      "expected": "REJECT[NOT_ATTENUATED]",
+      "description": "The spec repo's da-v1.fgc.jwt unchanged (reporting-bot, max_depth 1) with a minted delegator: the §4.7 grant for orders-reader plus a peer_agent entry whose peerDid is reporting-bot with subDelegationDepth 0 (the peer may not delegate onward). §5.3/§5.4: a DA's max_depth MUST NOT exceed the subDelegationDepth of the delegator's peer_agent entry whose peerDid is the DA's sub, when such an entry exists. The DA's data and budget entries are narrower than the delegator's (as in da-compact-fgc-valid), scope, trust_class and the validity window are equal, and the presenter proof (agent-key-2) is valid; the peer cap is the sole defect. Verifier MUST REJECT with NOT_ATTENUATED."
+    },
+    {
+      "fixture": "fixtures/da-compact-depth-exceeds-remaining.json",
+      "name": "aap-v1/da-compact-depth-exceeds-remaining",
+      "fixtureType": "da",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§5.3 Assertion Form (max_depth: remaining delegation depth below this assertion)"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§5.4 Attenuation (checked link by link)"
+        },
+        {
+          "id": "RFC 8693",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc8693",
+          "section": "§4.1 (nested act)"
+        }
+      ],
+      "expected": "REJECT[NOT_ATTENUATED]",
+      "description": "A DA delegated from a delegator DA at max_depth 2 (reporting-bot, minted here) onward to audit-bot, claiming max_depth 2 itself. §5.3: max_depth is the remaining delegation depth BELOW an assertion, so a DA one link below a depth-2 delegator may carry at most 1; claiming 2 would hand the delegatee as much remaining depth as its delegator held. act nests the chain (act.sub reporting-bot, act.act.sub orders-reader), scope, trust_class and the validity window equal the delegator's, no authorization_details is carried, the signature is valid; the depth is the sole defect. Verifier MUST REJECT with NOT_ATTENUATED."
+    },
+    {
       "fixture": "fixtures/da-compact-fgc-valid.json",
       "name": "aap-v1/da-compact-fgc-valid",
       "fixtureType": "da",
@@ -1091,6 +1143,27 @@
       ],
       "expected": "ACCEPT",
       "description": "A DA with max_depth 0 — a terminal delegation (§5.3: max_depth is an integer >= 0 and 0 is expressible; the 0.5 da-claims-v1 schema lowers the floor from 1 to 0). Delegator is the spec repo's cgt-v1.jwt; scope and trust_class are equal and the validity window is the delegator's. Minted here (the spec repo publishes no depth-0 example). A verifier that still floors max_depth at 1 wrongly rejects it. Verifier MUST ACCEPT."
+    },
+    {
+      "fixture": "fixtures/da-compact-trust-class-widened.json",
+      "name": "aap-v1/da-compact-trust-class-widened",
+      "fixtureType": "da",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§5.3 Assertion Form (scope and trust_class equal to or a subset of the delegator's)"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§5.1 Purpose (scope cannot exceed the delegator's)"
+        }
+      ],
+      "expected": "REJECT[SCOPE_NOT_SUBSET]",
+      "description": "The §5.3 DA claim set (the shape of da-v1.jwt) with trust_class orders:write against the delegator cgt-v1.jwt, whose trust_class is orders:read. §5.3: the delegatee's scope and trust_class MUST be equal to or a subset of the delegator's; a different trust class is a capability the delegator does not hold. scope (orders.read) is a subset, the validity window equals the delegator's, max_depth is 1, the signature is valid, and no authorization_details is carried so no §4.4 reading is involved; the trust class is the sole defect. Verifier MUST REJECT with SCOPE_NOT_SUBSET."
     },
     {
       "fixture": "fixtures/da-compact-valid.json",
