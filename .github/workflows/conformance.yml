@@ -18,9 +18,10 @@ permissions:
 
 env:
   # agent-authorization-protocol ref the vendored schemas and reused ACCEPT
-  # token bytes are pinned to (AAP-SPEC 0.4.0-draft, ML-DSA-65 activation,
-  # RFC 9964 — PR #9 merge).
-  AAP_SPEC_REF: b74ae2c99db15c7ba9d99516a52aca5232f0a6ae
+  # token bytes are pinned to (AAP-SPEC 0.5.0-draft: authorization_details,
+  # aap_crit, cnf, the attenuation relation, session_label, presenter test
+  # keys).
+  AAP_SPEC_REF: b5f6011eded7a9f27cfcfda08ad1441abcb9a68f
 
 jobs:
   conformance:

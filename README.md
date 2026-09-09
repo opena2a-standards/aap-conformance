@@ -1,7 +1,7 @@
 # aap-conformance
 
 Conformance fixtures and reference verifiers for the
-[Agent Authorization Protocol (AAP) 0.3.0-draft](https://github.com/opena2a-standards/agent-authorization-protocol)
+[Agent Authorization Protocol (AAP) 0.5.0-draft](https://github.com/opena2a-standards/agent-authorization-protocol)
 token canonical form (AAP-SPEC §9: JWTs over JWS — serialization IS
 canonicalization).
 

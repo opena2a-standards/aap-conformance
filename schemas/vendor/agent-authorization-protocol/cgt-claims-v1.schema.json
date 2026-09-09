@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://specs.opena2a.org/schemas/aap/cgt-claims-v1.schema.json",
   "title": "AAP Capability Grant Token claim set (AAP-SPEC section 4.2)",
-  "description": "Claims of the CGT, ratified byte-for-byte from the reference broker assertion (Secretless src/broker/cpi/assertion.ts). `iss` is the minting broker's issuer identifier, `sub` the agent DID from the verified ATX, `aud`/`scope` the downstream audience and OAuth scope, `trust_class` the ATX capability (abstract trust class) exercised for this grant, `issuer_chain`/`trust_level` the federation attributes carried for v2 cross-broker verification. The optional FGA members (`fga_constraints`, `intent_verified`, `max_uses`, `context_required`) are optional-to-ignore (AAP broker profile section 8.3) and are not minted by the v1 reference.",
+  "description": "Claims of the CGT, ratified byte-for-byte from the reference broker assertion (Secretless src/broker/cpi/assertion.ts). `iss` is the minting broker's issuer identifier, `sub` the agent DID from the verified ATX, `aud`/`scope` the downstream audience and OAuth scope, `trust_class` the ATX capability (abstract trust class) exercised for this grant, `issuer_chain`/`trust_level` the federation attributes carried for v2 cross-broker verification. AAP-SPEC 0.5 adds `authorization_details` (RFC 9396, structured grant entries typed by the section 4.4 registry), `aap_crit` (section 4.5, the claims a verifier must understand or reject) and `cnf` (RFC 7800, presenter key binding, section 4.6); all three are additive, so a token that omits them is byte-identical to its 0.4 form and the claim schema stays at v1. `fga_constraints` is deprecated in 0.5 (replaced by `authorization_details`; no implementation minted it) and stays defined so the -00/-01 text and the reference verifiers keep validating. The other optional members (`intent_verified`, `max_uses`, `context_required`) are optional-to-ignore (AAP broker profile section 8.3) and are not minted by the v1 reference. The schema pins presence and form; the narrowing rule of section 4.4 (authorization_details never widens scope or trust_class), the attenuation relation of section 5.4 and the aap_crit rejection rule are verifier checks.",
   "type": "object",
   "required": ["iss", "sub", "aud", "scope", "trust_class", "issuer_chain", "trust_level", "iat", "exp", "jti"],
   "properties": {
@@ -55,19 +55,109 @@
       "type": "integer",
       "minimum": 1
     },
+    "authorization_details": {
+      "$ref": "#/$defs/authorizationDetails"
+    },
+    "aap_crit": {
+      "$ref": "#/$defs/aapCrit"
+    },
+    "cnf": {
+      "$ref": "#/$defs/cnf"
+    },
     "fga_constraints": {
       "type": "string",
-      "description": "JSON-encoded FGA policy (AAP-SPEC section 4.2). Optional-to-ignore."
+      "deprecated": true,
+      "description": "DEPRECATED in AAP-SPEC 0.5 (section 4.2); replacedBy `authorization_details`. JSON-encoded FGA policy from the 0.3/0.4 text. Optional-to-ignore: a verifier ignores it. No implementation minted it as of 2026-09-08. Kept so -00/-01 tokens and the reference verifiers keep validating; removal is a later draft's decision."
     },
     "intent_verified": {
       "type": "boolean"
     },
     "max_uses": {
       "type": "integer",
-      "minimum": 1
+      "minimum": 1,
+      "deprecated": true,
+      "description": "DEPRECATED in AAP-SPEC 0.5 (section 4.2); replacedBy `budget.maxUses` inside `authorization_details`. Optional-to-ignore. When both are present `budget.maxUses` MUST NOT exceed `max_uses` (a verifier check)."
     },
     "context_required": {
       "type": "boolean"
+    }
+  },
+  "$defs": {
+    "authorizationDetails": {
+      "type": "array",
+      "minItems": 1,
+      "description": "RFC 9396 authorization_details: an array of entries, each typed by the AAP-SPEC section 4.4.1 registry. The wire value of `type` is the registry URI `https://specs.opena2a.org/aap/types/<name>` (`<name>` one of mcp_tool, skill, peer_agent, model, network, data, budget); `type` is REQUIRED (RFC 9396 section 2). Per-type members are camelCase (section 9.6); `requiresApproval` MAY appear on every type. The schema pins the common shape and leaves per-type members open because an unknown type is rejected by the aap_crit rule, not by the schema.",
+      "items": {
+        "type": "object",
+        "required": ["type"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "pattern": "^https://specs\\.opena2a\\.org/aap/types/[a-z_]+$"
+          },
+          "requiresApproval": {
+            "type": "boolean"
+          },
+          "locations": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "actions": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "datatypes": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "identifier": {
+            "type": "string",
+            "minLength": 1
+          },
+          "privileges": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "egressCeiling": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "labelCeiling": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "aapCrit": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "description": "AAP-SPEC section 4.5: the claim names a verifier MUST understand or reject the token. MUST name `authorization_details` and `cnf` whenever those claims are present; MUST NOT name a claim absent from the token (a verifier check).",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "cnf": {
+      "type": "object",
+      "description": "RFC 7800 confirmation claim binding the token to the presenter's key (AAP-SPEC section 4.6). Exactly one of `jwk` (RFC 7800 section 3.2) or `jkt` (the RFC 7638 SHA-256 JWK thumbprint, base64url, as registered for `cnf` by RFC 9449).",
+      "oneOf": [
+        { "required": ["jwk"] },
+        { "required": ["jkt"] }
+      ],
+      "properties": {
+        "jwk": {
+          "type": "object",
+          "required": ["kty"]
+        },
+        "jkt": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{43}$"
+        }
+      }
     }
   }
 }

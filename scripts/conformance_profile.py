@@ -27,7 +27,7 @@ SUITE = {
     "spec": {
         "id": "AAP",
         "name": "Agent Authorization Protocol",
-        "version": "0.4.0-draft",
+        "version": "0.5.0-draft",
         "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
     },
     "fixtureManifest": "MANIFEST.sha256",

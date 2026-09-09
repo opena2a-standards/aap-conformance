@@ -44,7 +44,8 @@
     },
     "max_depth": {
       "type": "integer",
-      "minimum": 1
+      "minimum": 0,
+      "description": "Remaining delegation depth; 0 is a terminal delegation (AAP-SPEC 0.5 section 5.3). MUST NOT exceed the delegator's matching peer_agent subDelegationDepth (section 5.4; a verifier check)."
     },
     "delegator_atx": {
       "type": "string",
@@ -65,9 +66,60 @@
     "aap_ver": {
       "type": "integer",
       "minimum": 1
+    },
+    "authorization_details": {
+      "$ref": "#/$defs/authorizationDetails"
+    },
+    "aap_crit": {
+      "$ref": "#/$defs/aapCrit"
+    },
+    "cnf": {
+      "$ref": "#/$defs/cnf"
+    },
+    "fga_constraints": {
+      "type": "string",
+      "deprecated": true,
+      "description": "DEPRECATED in AAP-SPEC 0.5; replacedBy `authorization_details`. Optional-to-ignore. No implementation minted it as of 2026-09-08."
     }
   },
   "$defs": {
+    "authorizationDetails": {
+      "type": "array",
+      "minItems": 1,
+      "description": "RFC 9396 authorization_details typed by the AAP-SPEC section 4.4.1 registry; the wire value of `type` is the registry URI `https://specs.opena2a.org/aap/types/<name>`. In a DA every entry MUST be narrower than or equal to a delegator entry of the same type and no entry may lack a parent (section 5.4); the schema pins presence and form, the attenuation relation is a verifier check. Duplicated from cgt-claims-v1 so the DA schema stays self-contained.",
+      "items": {
+        "type": "object",
+        "required": ["type"],
+        "properties": {
+          "type": { "type": "string", "pattern": "^https://specs\\.opena2a\\.org/aap/types/[a-z_]+$" },
+          "requiresApproval": { "type": "boolean" },
+          "locations": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+          "actions": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+          "datatypes": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+          "identifier": { "type": "string", "minLength": 1 },
+          "privileges": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+          "egressCeiling": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+          "labelCeiling": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }
+        }
+      }
+    },
+    "aapCrit": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "cnf": {
+      "type": "object",
+      "oneOf": [
+        { "required": ["jwk"] },
+        { "required": ["jkt"] }
+      ],
+      "properties": {
+        "jwk": { "type": "object", "required": ["kty"] },
+        "jkt": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" }
+      }
+    },
     "actor": {
       "type": "object",
       "required": ["sub"],
