@@ -233,8 +233,11 @@ enforces every claim in this README on each push and pull request:
    ([`scripts/parity/parity.py`](./scripts/parity/parity.py)) asserts the
    Node and Python verifiers agree per fixture on gate status, verdict, and
    reject category, and publishes `parity-report.json` as a CI artifact.
-6. `conformance.json` must match the fixture set, and the Scope table above
-   must have exactly one row for every fixture.
+6. `conformance.json` must match the fixture set, the Scope table above
+   must have exactly one row for every fixture, and every tracked file at
+   the repository root must be named in this README, except the ones git
+   and npm read by convention (`.gitignore`, `LICENSE`, `package.json`,
+   `package-lock.json`).
 7. On every push to `main`, CI keyless-signs `MANIFEST.sha256` with Sigstore
    cosign (Rekor is the durable record) — see
    [`COSIGNERS.md`](./COSIGNERS.md) for how second parties cosign.
