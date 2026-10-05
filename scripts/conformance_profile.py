@@ -8,8 +8,8 @@ references and expected block), so the profile cannot drift from the fixture
 set: regeneration is deterministic and CI verifies the committed file matches.
 
 `--check` also verifies the human-readable counterpart: the README's
-"What this suite verifies" table must have a row for every fixture in
-`fixtures/` and name no fixture that does not exist.
+"What this suite verifies" table must have exactly one row for every fixture
+in `fixtures/` and name no fixture that does not exist.
 
 Usage:
     python3 scripts/conformance_profile.py            # (re)write conformance.json
@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+from collections import Counter
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -124,7 +125,8 @@ def build() -> dict:
 def readme_table_fixtures() -> list[str] | None:
     """Fixture paths named in the README "What this suite verifies" table.
 
-    Returns None when the table cannot be found.
+    One entry per table row that names the fixture, so a fixture named in two
+    rows appears twice. Returns None when the table cannot be found.
     """
     lines = README.read_text().splitlines()
     if README_TABLE_MARKER not in lines:
@@ -134,7 +136,7 @@ def readme_table_fixtures() -> list[str] | None:
     for line in lines[lines.index(README_TABLE_MARKER) + 1 :]:
         if line.startswith("|"):
             in_table = True
-            named += README_FIXTURE_REF.findall(line)
+            named += dict.fromkeys(README_FIXTURE_REF.findall(line))
         elif in_table or line.strip():
             break
     return named if in_table else None
@@ -145,8 +147,10 @@ def check_readme_table(profile: dict) -> list[str]:
     if named is None:
         return [f'README.md: no table after "{README_TABLE_MARKER}"']
     fixtures = {req["fixture"] for req in profile["requirements"]}
-    problems = [f"README.md table has no row for {f}" for f in sorted(fixtures - set(named))]
-    problems += [f"README.md table names {f}, which is not in fixtures/" for f in sorted(set(named) - fixtures)]
+    rows = Counter(named)
+    problems = [f"README.md table has no row for {f}" for f in sorted(fixtures - set(rows))]
+    problems += [f"README.md table names {f}, which is not in fixtures/" for f in sorted(set(rows) - fixtures)]
+    problems += [f"README.md table names {f} in {n} rows" for f, n in sorted(rows.items()) if n > 1]
     return problems
 
 

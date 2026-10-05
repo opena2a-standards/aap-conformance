@@ -234,7 +234,7 @@ enforces every claim in this README on each push and pull request:
    Node and Python verifiers agree per fixture on gate status, verdict, and
    reject category, and publishes `parity-report.json` as a CI artifact.
 6. `conformance.json` must match the fixture set, and the Scope table above
-   must have a row for every fixture.
+   must have exactly one row for every fixture.
 7. On every push to `main`, CI keyless-signs `MANIFEST.sha256` with Sigstore
    cosign (Rekor is the durable record) — see
    [`COSIGNERS.md`](./COSIGNERS.md) for how second parties cosign.
