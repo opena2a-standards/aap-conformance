@@ -68,13 +68,17 @@ What this suite verifies:
 | AAP §5.3 DA claim set (RFC 8693 `act` delegation members) | `fixtures/da-compact-valid.json` |
 | AAP §6.4 BAC Level 3 claim set (cumulative levels, 60-second window) | `fixtures/bac-compact-valid.json` |
 | AAP §9.4 multi-signature form (JWS General JSON Serialization, per-entry `{alg, kid}` headers) | `fixtures/cgt-general-valid.json` |
+| AAP §9.3/§9.5 compact ML-DSA-65 form (PQ-interop lane: RFC 9964 suite, FIPS 204 deterministic signature, signed by `broker-pqc-1`) | `fixtures/cgt-mldsa65-compact-valid.json` |
+| AAP §9.4/§8.2 hybrid profile (General JSON Serialization with one Ed25519 and one ML-DSA-65 entry over the same payload, on a path whose policy requires both families) | `fixtures/cgt-hybrid-general-valid.json` |
 | AAP §9.1 must-reject: signature does not verify under the declared kid | `fixtures/cgt-compact-bad-signature.json` |
 | AAP §8.2/§9.5 must-reject: unregistered `alg` (silent-downgrade guard) | `fixtures/cgt-compact-unknown-alg.json` |
+| AAP §9.5/§8.2 must-reject: `alg` `ML-DSA-44` (registered for JOSE by RFC 9964, absent from the AAP suite registry) | `fixtures/cgt-mldsa44-compact-unknown-alg.json` |
 | AAP §9.2 must-reject: unknown header parameter, including `crit` (closed v1 header) | `fixtures/cgt-compact-crit-header.json` |
 | AAP §9.2 must-reject: duplicate protected-header member (last-wins/first-wins parser split; strict parse required) | `fixtures/cgt-compact-duplicate-header-member.json` |
 | RFC 7519 §4.1.4 must-reject: expired token (byte-identical to the valid CGT; only the pinned clock differs) | `fixtures/cgt-compact-expired.json` |
 | AAP §4.2 must-reject: missing REQUIRED claim (`trust_class`) | `fixtures/cgt-compact-missing-trust-class.json` |
 | AAP §8.1 must-reject: malformed `jti` (uppercase hex) | `fixtures/cgt-compact-jti-uppercase.json` |
+| AAP §8.1 must-reject: replayed `jti` (the valid CGT presented twice to the same verifier; the first presentation is accepted, the second rejects) | `fixtures/cgt-compact-replayed.json` |
 | AAP §4.2 must-reject: scope-shaped `trust_class` (regression fixture for the reference-broker bug fixed in secretless-ai#92) | `fixtures/cgt-compact-trust-class-scope-shaped.json` |
 | AAP §6.1 must-reject: BAC validity window `exp - iat` > 60 seconds | `fixtures/bac-compact-ttl-exceeded.json` |
 | AAP §6.4 must-reject: `bac_level` 3 without `drift_score` (cumulative levels) | `fixtures/bac-compact-l3-missing-drift-score.json` |
@@ -91,6 +95,9 @@ What this suite verifies:
 | AAP §4.6 must-reject: presenter proof under the `cnf`-bound key `agent-key-1` (thumbprint matches) whose signature over the challenge does not verify (token bytes identical to the valid fixture) | `fixtures/cgt-compact-cnf-bad-proof-signature.json` |
 | AAP §5.4 must-reject: DA `authorization_details` widened beyond the delegator's (`fieldsAllowed` not a subset) | `fixtures/da-compact-authorization-details-widened.json` |
 | AAP §5.3 must-reject: delegating past a terminal (`max_depth` 0) delegator | `fixtures/da-compact-past-terminal-depth.json` |
+| AAP §9.4 must-reject: hybrid token whose ML-DSA-65 entry verifies and whose Ed25519 entry does not (signed by `broker-key-2` under the declared kid `broker-key-1`) | `fixtures/cgt-hybrid-ed25519-bad-signature.json` |
+| AAP §9.4 must-reject: hybrid token whose Ed25519 entry verifies and whose ML-DSA-65 signature is corrupted (the classical half alone does not carry the token) | `fixtures/cgt-hybrid-mldsa-bad-signature.json` |
+| AAP §9.4/§8.2 must-reject: general-form token carrying only an ML-DSA-65 entry (declaring ML-DSA-65 puts it on the hybrid profile, which requires an Ed25519 entry too) | `fixtures/cgt-hybrid-missing-ed25519.json` |
 | AAP §9.4/§8.2 must-reject: hybrid token with its declared ML-DSA-65 entry stripped, on a path whose policy requires both families | `fixtures/cgt-hybrid-missing-mldsa65.json` |
 | AAP §5.4 must-reject: DA whose `exp` is later than its delegator's (a DA carries less than the delegator's grant; `iat`/`exp` are the validity window, §4.2) | `fixtures/da-compact-outlives-delegator.json` |
 | AAP §5.3/§5.4 must-reject: supplied delegator token is not the DA's delegator (`sub` is not the DA's `act.sub`) | `fixtures/da-compact-delegator-mismatch.json` |
@@ -226,7 +233,8 @@ enforces every claim in this README on each push and pull request:
    ([`scripts/parity/parity.py`](./scripts/parity/parity.py)) asserts the
    Node and Python verifiers agree per fixture on gate status, verdict, and
    reject category, and publishes `parity-report.json` as a CI artifact.
-6. `conformance.json` must match the fixture set.
+6. `conformance.json` must match the fixture set, and the Scope table above
+   must have a row for every fixture.
 7. On every push to `main`, CI keyless-signs `MANIFEST.sha256` with Sigstore
    cosign (Rekor is the durable record) — see
    [`COSIGNERS.md`](./COSIGNERS.md) for how second parties cosign.

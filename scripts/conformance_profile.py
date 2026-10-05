@@ -7,18 +7,26 @@ DERIVED from the fixtures themselves (each fixture carries its spec
 references and expected block), so the profile cannot drift from the fixture
 set: regeneration is deterministic and CI verifies the committed file matches.
 
+`--check` also verifies the human-readable counterpart: the README's
+"What this suite verifies" table must have a row for every fixture in
+`fixtures/` and name no fixture that does not exist.
+
 Usage:
     python3 scripts/conformance_profile.py            # (re)write conformance.json
-    python3 scripts/conformance_profile.py --check    # exit 1 if committed file is stale
+    python3 scripts/conformance_profile.py --check    # exit 1 if conformance.json or the README table is stale
 """
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 OUT = REPO_ROOT / "conformance.json"
+README = REPO_ROOT / "README.md"
+README_TABLE_MARKER = "What this suite verifies:"
+README_FIXTURE_REF = re.compile(r"`(fixtures/[A-Za-z0-9._-]+\.json)`")
 
 # --- suite metadata (hand-maintained; everything under `requirements` is derived) ---
 SUITE = {
@@ -113,19 +121,58 @@ def build() -> dict:
     return profile
 
 
+def readme_table_fixtures() -> list[str] | None:
+    """Fixture paths named in the README "What this suite verifies" table.
+
+    Returns None when the table cannot be found.
+    """
+    lines = README.read_text().splitlines()
+    if README_TABLE_MARKER not in lines:
+        return None
+    named: list[str] = []
+    in_table = False
+    for line in lines[lines.index(README_TABLE_MARKER) + 1 :]:
+        if line.startswith("|"):
+            in_table = True
+            named += README_FIXTURE_REF.findall(line)
+        elif in_table or line.strip():
+            break
+    return named if in_table else None
+
+
+def check_readme_table(profile: dict) -> list[str]:
+    named = readme_table_fixtures()
+    if named is None:
+        return [f'README.md: no table after "{README_TABLE_MARKER}"']
+    fixtures = {req["fixture"] for req in profile["requirements"]}
+    problems = [f"README.md table has no row for {f}" for f in sorted(fixtures - set(named))]
+    problems += [f"README.md table names {f}, which is not in fixtures/" for f in sorted(set(named) - fixtures)]
+    return problems
+
+
 def main() -> int:
-    rendered = json.dumps(build(), indent=2, ensure_ascii=False) + "\n"
+    profile = build()
+    rendered = json.dumps(profile, indent=2, ensure_ascii=False) + "\n"
     if "--check" in sys.argv:
+        rc = 0
         if not OUT.exists():
             print("conformance.json missing; run scripts/conformance_profile.py")
-            return 1
-        if OUT.read_text() != rendered:
+            rc = 1
+        elif OUT.read_text() != rendered:
             print("conformance.json is stale; run scripts/conformance_profile.py")
-            return 1
-        print("conformance.json is current")
-        return 0
+            rc = 1
+        else:
+            print("conformance.json is current")
+        problems = check_readme_table(profile)
+        for problem in problems:
+            print(problem)
+        if problems:
+            rc = 1
+        else:
+            print(f"README.md table names all {len(profile['requirements'])} fixtures")
+        return rc
     OUT.write_text(rendered)
-    print(f"wrote conformance.json ({len(build()['requirements'])} requirements)")
+    print(f"wrote conformance.json ({len(profile['requirements'])} requirements)")
     return 0
 
 
