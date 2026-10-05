@@ -395,11 +395,17 @@ const bacSessionClaims = () => ({
 // signature over those challenge bytes. The proof carries the presenter's
 // public JWK; a verifier binds it to the token by comparing its RFC 7638
 // thumbprint with cnf.jkt and then verifying the signature under it.
-function presenterProof(kid, label) {
+// With tamperSig the produced signature is deterministically corrupted
+// (first byte XOR 0xff, the mintGeneral convention), so the proof carries the
+// bound key and a signature that does not verify under it.
+function presenterProof(kid, label, { tamperSig = false } = {}) {
   const challenge = createHash("sha256").update(`aap-conformance presenter challenge ${label}`).digest();
   const key = KEYS.get(kid);
   const signature = cryptoSign(null, challenge, key.priv);
-  if (!cryptoVerify(null, challenge, key.pub, signature)) throw new Error(`presenter proof ${kid}: self-verify failed`);
+  if (tamperSig) signature[0] ^= 0xff;
+  if (cryptoVerify(null, challenge, key.pub, signature) === tamperSig) {
+    throw new Error(`presenter proof ${kid}: self-verify ${tamperSig ? "unexpectedly succeeded" : "failed"}`);
+  }
   return {
     proof: {
       binding: "signed-challenge",
@@ -991,6 +997,20 @@ fixture("cgt-compact-cnf-mismatch", {
   verifierState: state(["broker-key-1"]),
   presentation: presenterProof("agent-key-2", JTI.cgtFgc),
   expected: { verifyResult: "REJECT", rejectCategory: "CNF_MISMATCH", reasonContains: "cnf" },
+  schemaValid: true,
+  headerSchemaValid: true,
+  token: CGT_FGC_TOKEN,
+});
+
+fixture("cgt-compact-cnf-bad-proof-signature", {
+  description:
+    "Byte-identical to cgt-compact-fgc-valid (the spec repo's cgt-v1.fgc.jwt, cnf bound to agent-key-1); only the presentation differs — the proof carries agent-key-1's public JWK, whose RFC 7638 thumbprint IS the token's cnf.jkt, but its signature over the challenge is deterministically corrupted (first byte flipped) and does not verify under that key. §4.6: a verifier MUST verify the presenter's proof against the bound key and MUST reject the token otherwise — a verifier that compares the thumbprint and never verifies the signature accepts a forged proof. The token signature is valid and the key binding matches; the proof signature is the sole defect. Verifier MUST REJECT with CNF_MISMATCH.",
+  fixtureType: "cgt",
+  tokenForm: "compact",
+  spec: [ref("§4.6 Proof of possession (MUST verify the presenter's proof against the bound key)"), ref("§8.6 Presentation is not possession"), BROKER_PROFILE_6_8, RFC7800, RFC7638],
+  verifierState: state(["broker-key-1"]),
+  presentation: presenterProof("agent-key-1", JTI.cgtFgc, { tamperSig: true }),
+  expected: { verifyResult: "REJECT", rejectCategory: "CNF_MISMATCH", reasonContains: "signature" },
   schemaValid: true,
   headerSchemaValid: true,
   token: CGT_FGC_TOKEN,
