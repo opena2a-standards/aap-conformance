@@ -9,16 +9,22 @@ set: regeneration is deterministic and CI verifies the committed file matches.
 
 `--check` also verifies the human-readable counterpart: the README's
 "What this suite verifies" table must have exactly one row for every fixture
-in `fixtures/` and name no fixture that does not exist.
+in `fixtures/` and name no fixture that does not exist. It also requires every
+tracked file at the repository root to be named in the README, except the
+files git and npm read by convention, so no root file is left unexplained.
+Outside a git checkout (a source archive, a temporary copy) the root files
+that the root `.gitignore` does not exclude stand in for the tracked ones.
 
 Usage:
     python3 scripts/conformance_profile.py            # (re)write conformance.json
-    python3 scripts/conformance_profile.py --check    # exit 1 if conformance.json or the README table is stale
+    python3 scripts/conformance_profile.py --check    # exit 1 if conformance.json, the README table or a root file is stale
 """
 from __future__ import annotations
 
+import fnmatch
 import json
 import re
+import subprocess
 import sys
 from collections import Counter
 from pathlib import Path
@@ -28,6 +34,9 @@ OUT = REPO_ROOT / "conformance.json"
 README = REPO_ROOT / "README.md"
 README_TABLE_MARKER = "What this suite verifies:"
 README_FIXTURE_REF = re.compile(r"`(fixtures/[A-Za-z0-9._-]+\.json)`")
+# Root files that git or npm read by convention; every other tracked root file
+# must be named in the README.
+ROOT_CONVENTION_FILES = {".gitignore", "LICENSE", "README.md", "package.json", "package-lock.json"}
 
 # --- suite metadata (hand-maintained; everything under `requirements` is derived) ---
 SUITE = {
@@ -158,6 +167,74 @@ def check_readme_table(profile: dict) -> list[str]:
     return problems
 
 
+def git_root_files() -> list[str] | None:
+    """Tracked files at the repository root, or None when it is not a git checkout.
+
+    The repository root must be the checkout's top level: a copy that sits
+    untracked inside some other checkout is not a checkout of this repository.
+    """
+    try:
+        top = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"], cwd=REPO_ROOT, capture_output=True, text=True, check=True
+        ).stdout.strip()
+        if Path(top).resolve() != REPO_ROOT:
+            return None
+        out = subprocess.run(
+            ["git", "ls-files", "-z"], cwd=REPO_ROOT, capture_output=True, check=True
+        ).stdout
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return sorted(p for p in out.decode().split("\0") if p and "/" not in p)
+
+
+def gitignored(name: str, patterns: list[str]) -> bool:
+    """Whether .gitignore `patterns` exclude the root file `name`; the last matching pattern wins."""
+    ignored = False
+    for pattern in patterns:
+        negated = pattern.startswith("!")
+        pattern = pattern.removeprefix("!")
+        if pattern.endswith("/"):
+            continue  # matches directories only
+        pattern = pattern.removeprefix("/").removeprefix("**/")
+        if "/" not in pattern and fnmatch.fnmatchcase(name, pattern):
+            ignored = not negated
+    return ignored
+
+
+def root_files() -> list[str]:
+    """Files at the repository root that the README must account for.
+
+    In a git checkout these are the tracked root files. Elsewhere they are the
+    root files the root `.gitignore` does not exclude, the ones a checkout
+    would track.
+    """
+    tracked = git_root_files()
+    if tracked is not None:
+        return tracked
+    try:
+        lines = (REPO_ROOT / ".gitignore").read_text().splitlines()
+    except OSError:
+        lines = []
+    patterns = [line.rstrip() for line in lines if line.strip() and not line.startswith("#")]
+    return sorted(
+        p.name
+        for p in REPO_ROOT.iterdir()
+        if p.is_file() and p.name != ".git" and not gitignored(p.name, patterns)
+    )
+
+
+def check_root_files() -> list[str]:
+    try:
+        readme = README.read_text()
+    except OSError:
+        return ["root files not checked: README.md cannot be read"]
+    return [
+        f"{name} is at the repository root but README.md does not name it"
+        for name in root_files()
+        if name not in ROOT_CONVENTION_FILES and name not in readme
+    ]
+
+
 def main() -> int:
     profile = build()
     rendered = json.dumps(profile, indent=2, ensure_ascii=False) + "\n"
@@ -178,6 +255,13 @@ def main() -> int:
             rc = 1
         else:
             print(f"README.md table names all {len(profile['requirements'])} fixtures")
+        root_problems = check_root_files()
+        for problem in root_problems:
+            print(problem)
+        if root_problems:
+            rc = 1
+        else:
+            print("README.md names every root file")
         return rc
     OUT.write_text(rendered)
     print(f"wrote conformance.json ({len(profile['requirements'])} requirements)")
