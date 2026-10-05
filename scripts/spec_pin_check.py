@@ -15,8 +15,9 @@ pinned AAP ref and this script byte-compares:
     the signed bytes)
   - cgt-compact-expired and cgt-compact-replayed, which reuse cgt-v1.jwt
     byte-for-byte (only the pinned clock / presentation count differ);
-    cgt-compact-cnf-mismatch and cgt-compact-cnf-no-proof, which reuse
-    cgt-v1.fgc.jwt (only the presenter proof differs or is absent); and
+    cgt-compact-cnf-mismatch, cgt-compact-cnf-bad-proof-signature and
+    cgt-compact-cnf-no-proof, which reuse cgt-v1.fgc.jwt (only the presenter
+    proof differs, is corrupted or is absent); and
     da-compact-delegator-mismatch and da-compact-depth-exceeds-peer-cap, which
     reuse da-v1.fgc.jwt (only the supplied delegator token differs)
   - cgt-hybrid-missing-mldsa65, whose payload and remaining Ed25519 entry are
@@ -65,6 +66,7 @@ def main() -> int:
         ("da-compact-fgc-valid", "da-v1.fgc.jwt"),
         ("bac-compact-session-valid", "bac-v1.session.jwt"),
         ("cgt-compact-cnf-mismatch", "cgt-v1.fgc.jwt"),
+        ("cgt-compact-cnf-bad-proof-signature", "cgt-v1.fgc.jwt"),
         ("cgt-compact-cnf-no-proof", "cgt-v1.fgc.jwt"),
         ("da-compact-delegator-mismatch", "da-v1.fgc.jwt"),
         ("da-compact-depth-exceeds-peer-cap", "da-v1.fgc.jwt"),

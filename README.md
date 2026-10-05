@@ -19,11 +19,11 @@ Run it:
 ```bash
 npm install   # @noble/post-quantum, for the ML-DSA-65 fixtures (RFC 9964)
 node verifiers/node/verify.mjs fixtures
-# summary: 43 pass, 0 fail (43 fixtures)
+# summary: 44 pass, 0 fail (44 fixtures)
 
 pip install -r verifiers/python/requirements.txt
 python3 verifiers/python/verify.py fixtures
-# summary: 43 pass, 0 fail (43 fixtures)
+# summary: 44 pass, 0 fail (44 fixtures)
 ```
 
 The verifier pair is Node + Python deliberately (the
@@ -88,6 +88,7 @@ What this suite verifies:
 | AAP §4.5 must-reject: `aap_crit` names a claim the verifier does not implement | `fixtures/cgt-compact-crit-unsupported-claim.json` |
 | AAP §4.5 must-reject: `cnf` present but not named in `aap_crit` | `fixtures/cgt-compact-cnf-unlisted.json` |
 | AAP §4.6 must-reject: presenter proof from `agent-key-2` against a `cnf` bound to `agent-key-1` (token bytes identical to the valid fixture) | `fixtures/cgt-compact-cnf-mismatch.json` |
+| AAP §4.6 must-reject: presenter proof under the `cnf`-bound key `agent-key-1` (thumbprint matches) whose signature over the challenge does not verify (token bytes identical to the valid fixture) | `fixtures/cgt-compact-cnf-bad-proof-signature.json` |
 | AAP §5.4 must-reject: DA `authorization_details` widened beyond the delegator's (`fieldsAllowed` not a subset) | `fixtures/da-compact-authorization-details-widened.json` |
 | AAP §5.3 must-reject: delegating past a terminal (`max_depth` 0) delegator | `fixtures/da-compact-past-terminal-depth.json` |
 | AAP §9.4/§8.2 must-reject: hybrid token with its declared ML-DSA-65 entry stripped, on a path whose policy requires both families | `fixtures/cgt-hybrid-missing-mldsa65.json` |
@@ -207,7 +208,7 @@ CI-checked against drift.
 enforces every claim in this README on each push and pull request:
 
 1. Both reference verifiers run against `fixtures/` and must report
-   `43 pass, 0 fail`.
+   `44 pass, 0 fail`.
 2. Schema validation
    ([`scripts/schema_validation.py`](./scripts/schema_validation.py)): every
    fixture's decoded header/claims/container must match its DECLARED schema
@@ -246,5 +247,5 @@ grant rejects `DELEGATOR_INVALID`, since checking it would re-check nothing;
 and `presentation.proof` carries the presenter's signed-challenge proof
 (`binding`, `challenge`, `jwk`, `signature`) for a token with `cnf`, which
 rejects `CNF_MISMATCH` when the proof is absent or does not bind. A
-conforming verifier matches the expected verdict on all 43 fixtures — and
+conforming verifier matches the expected verdict on all 44 fixtures — and
 rejects for the pinned reason, not just any reason.

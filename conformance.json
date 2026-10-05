@@ -220,6 +220,42 @@
       "description": "The §4.2 CGT claim set with a header declaring kid broker-key-1, but the signature was produced by broker-key-2. The claims are schema-valid and unexpired; the signature is the sole defect. Verifier MUST REJECT with BAD_SIGNATURE."
     },
     {
+      "fixture": "fixtures/cgt-compact-cnf-bad-proof-signature.json",
+      "name": "aap-v1/cgt-compact-cnf-bad-proof-signature",
+      "fixtureType": "cgt",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§4.6 Proof of possession (MUST verify the presenter's proof against the bound key)"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§8.6 Presentation is not possession"
+        },
+        {
+          "id": "AAP-BROKER-PROFILE",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-BROKER-PROFILE.md",
+          "section": "§6.8 Presentation binding (signed challenge)"
+        },
+        {
+          "id": "RFC 7800",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc7800",
+          "section": "Proof-of-Possession Key Semantics for JWTs (the cnf claim)"
+        },
+        {
+          "id": "RFC 7638",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc7638",
+          "section": "JSON Web Key (JWK) Thumbprint (the jkt confirmation method, RFC 9449 §6.1)"
+        }
+      ],
+      "expected": "REJECT[CNF_MISMATCH]",
+      "description": "Byte-identical to cgt-compact-fgc-valid (the spec repo's cgt-v1.fgc.jwt, cnf bound to agent-key-1); only the presentation differs — the proof carries agent-key-1's public JWK, whose RFC 7638 thumbprint IS the token's cnf.jkt, but its signature over the challenge is deterministically corrupted (first byte flipped) and does not verify under that key. §4.6: a verifier MUST verify the presenter's proof against the bound key and MUST reject the token otherwise — a verifier that compares the thumbprint and never verifies the signature accepts a forged proof. The token signature is valid and the key binding matches; the proof signature is the sole defect. Verifier MUST REJECT with CNF_MISMATCH."
+    },
+    {
       "fixture": "fixtures/cgt-compact-cnf-mismatch.json",
       "name": "aap-v1/cgt-compact-cnf-mismatch",
       "fixtureType": "cgt",
