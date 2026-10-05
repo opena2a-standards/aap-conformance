@@ -1,16 +1,23 @@
 #!/usr/bin/env python3
-"""Tests for the README table check in conformance_profile.py.
+"""Tests for scripts/conformance_profile.py --check.
 
 `--check` must hold the README's "What this suite verifies" table to exactly
 one row per fixture: a missing row, a row for a fixture that does not exist,
 and a fixture named in more than one row are each reported.
 
-Usage:  python3 scripts/test_conformance_profile.py
+The CheckReadmeTest tests run the script from a temporary copy of the files it
+reads, so the repository's own README.md and conformance.json are never touched.
+
+Usage:
+    python3 scripts/test_conformance_profile.py
+    python3 -m unittest discover -s scripts -p 'test_*.py'
 """
 from __future__ import annotations
 
 import contextlib
 import io
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -97,6 +104,50 @@ class ReadmeTableCheck(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertIn(f"README.md table names {fixture} in 2 rows", out.getvalue().splitlines())
         self.assertNotIn("README.md table names all", out.getvalue())
+
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+class CheckReadmeTest(unittest.TestCase):
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        (self.root / "scripts").mkdir()
+        shutil.copy2(REPO_ROOT / "scripts" / "conformance_profile.py", self.root / "scripts")
+        shutil.copytree(REPO_ROOT / "fixtures", self.root / "fixtures")
+        shutil.copy2(REPO_ROOT / "conformance.json", self.root)
+        shutil.copy2(REPO_ROOT / "README.md", self.root)
+
+    def check(self) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(self.root / "scripts" / "conformance_profile.py"), "--check"],
+            capture_output=True,
+            text=True,
+        )
+
+    def test_current_repo_passes(self) -> None:
+        result = self.check()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("conformance.json is current", result.stdout)
+
+    def test_missing_readme_is_a_one_line_problem(self) -> None:
+        (self.root / "README.md").unlink()
+        result = self.check()
+        self.assertEqual(result.returncode, 1)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertIn("README.md: cannot be read (No such file or directory)", result.stdout.splitlines())
+        self.assertIn("conformance.json is current", result.stdout)
+
+    def test_unreadable_readme_is_a_one_line_problem(self) -> None:
+        (self.root / "README.md").unlink()
+        (self.root / "README.md").mkdir()
+        result = self.check()
+        self.assertEqual(result.returncode, 1)
+        self.assertNotIn("Traceback", result.stderr)
+        problems = [line for line in result.stdout.splitlines() if line.startswith("README.md: cannot be read (")]
+        self.assertEqual(len(problems), 1, result.stdout)
 
 
 if __name__ == "__main__":

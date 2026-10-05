@@ -126,7 +126,8 @@ def readme_table_fixtures() -> list[str] | None:
     """Fixture paths named in the README "What this suite verifies" table.
 
     One entry per table row that names the fixture, so a fixture named in two
-    rows appears twice. Returns None when the table cannot be found.
+    rows appears twice. Returns None when the table cannot be found. Raises
+    OSError when the README cannot be read.
     """
     lines = README.read_text().splitlines()
     if README_TABLE_MARKER not in lines:
@@ -143,7 +144,10 @@ def readme_table_fixtures() -> list[str] | None:
 
 
 def check_readme_table(profile: dict) -> list[str]:
-    named = readme_table_fixtures()
+    try:
+        named = readme_table_fixtures()
+    except OSError as exc:
+        return [f"README.md: cannot be read ({exc.strerror or exc})"]
     if named is None:
         return [f'README.md: no table after "{README_TABLE_MARKER}"']
     fixtures = {req["fixture"] for req in profile["requirements"]}
