@@ -4,8 +4,9 @@
 `--check` must hold the README's "What this suite verifies" table to exactly
 one row per fixture: a missing row, a row for a fixture that does not exist,
 and a fixture named in more than one row are each reported, indented rows
-included. A file the script cannot read or decode is a one-line problem, not a
-traceback, and an argument other than `--check` writes nothing.
+included. A file the script cannot read or decode, and a conformance.json it cannot
+write, is a one-line problem, not a traceback, and an argument other than
+`--check` writes nothing.
 
 The CheckReadmeTest tests run the script from a temporary copy of the files it
 reads, so the repository's own README.md and conformance.json are never touched.
@@ -195,6 +196,11 @@ class CheckReadmeTest(unittest.TestCase):
                 "README.md names every root file",
             ],
         )
+
+    def test_unwritable_conformance_json_is_a_one_line_problem(self) -> None:
+        (self.root / "conformance.json").unlink()
+        (self.root / "conformance.json").mkdir()
+        self.assert_problems(self.run_script(), ["conformance.json: cannot be written (Is a directory)"])
 
     def test_fixture_not_json_is_a_one_line_problem(self) -> None:
         (self.root / "fixtures" / "ait-compact-valid.json").write_text("{not json\n")

@@ -17,7 +17,8 @@ source archive, a temporary copy, or a checkout where git is missing or fails)
 the root files that the root `.gitignore` does not exclude stand in for them.
 
 A file that cannot be read, is not valid UTF-8, or (for a fixture) is not a
-valid fixture is reported as a one-line problem naming it, with exit 1.
+valid fixture, and a conformance.json that cannot be written, is reported as
+a one-line problem naming it, with exit 1.
 
 Usage:
     python3 scripts/conformance_profile.py            # (re)write conformance.json
@@ -543,7 +544,11 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print("README.md names every root file")
         return rc
-    OUT.write_text(rendered, encoding="utf-8")
+    try:
+        OUT.write_text(rendered, encoding="utf-8")
+    except OSError as exc:
+        print(f"conformance.json: cannot be written ({exc.strerror or exc})")
+        return 1
     print(f"wrote conformance.json ({len(profile['requirements'])} requirements)")
     return 0
 
