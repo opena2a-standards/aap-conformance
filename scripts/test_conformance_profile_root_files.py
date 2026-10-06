@@ -44,6 +44,14 @@ GITIGNORE_CASES = [
     ("!x", "\\!x", True),
     ("x", "!x", False),
     ("x.txt", "\\x.txt", True),
+    ("a.b", "a\\.b", True),  # an escaped regex metacharacter is literal
+    ("axb", "a\\.b", False),
+    ("*", "\\*", True),
+    ("x", "\\*", False),
+    ("?", "\\?", True),
+    ("x", "\\?", False),
+    ("[x]", "\\[x]", True),
+    ("x", "\\[x]", False),
     ("b.txt", "[^a].txt", True),
     ("a.txt", "[^a].txt", False),
     ("^.txt", "[^a].txt", True),
@@ -148,10 +156,28 @@ class RootFileRuleTest(unittest.TestCase):
         (self.root / ".DS_Store").write_text("")
         self.assert_passes()
 
+    def test_non_git_copy_reads_a_gitignore_that_starts_with_a_byte_order_mark(self) -> None:
+        # Git skips a UTF-8 byte-order mark at the start of .gitignore, so its
+        # first pattern still applies.
+        (self.root / ".gitignore").write_bytes(b"\xef\xbb\xbfNOTES.md\n")
+        (self.root / "NOTES.md").write_text("notes\n")
+        with mock.patch.object(cp, "REPO_ROOT", self.root):
+            self.assertNotIn("NOTES.md", cp.root_files())
+        self.assert_passes()
+
     def test_name_inside_a_longer_path_does_not_name_the_root_file(self) -> None:
         self.assertIn("verify.py", (self.root / "README.md").read_text())
         (self.root / "verify.py").write_text("x\n")
         self.assert_reports(unnamed("verify.py"))
+
+    def test_titled_and_reference_style_links_name_the_root_file(self) -> None:
+        readme = self.root / "README.md"
+        original = readme.read_text()
+        (self.root / "Makefile").write_text("all:\n")
+        for mention in ['See [build](./Makefile "Build").', "[build]: ./Makefile"]:
+            with self.subTest(mention=mention):
+                readme.write_text(f"{original}\n{mention}\n")
+                self.assert_passes()
 
     def test_non_git_copy_skips_root_directories(self) -> None:
         (self.root / "extras").mkdir()
@@ -235,6 +261,16 @@ class ReadmeNamesTest(unittest.TestCase):
             "See [the guide](./Makefile).",
             "See [the guide](Makefile).",
             "See [the guide](./Makefile#targets).",
+            'See [build](./Makefile "Build").',
+            "See [build](Makefile 'Build').",
+            "See [build](./Makefile (Build)).",
+            'See [build](./Makefile#targets "Build").',
+            "See [build](<./Makefile>).",
+            "See [build](\n  ./Makefile\n  \"Build\"\n).",
+            "[build]: ./Makefile",
+            'Intro.\n\n[build]: Makefile "Build"\n',
+            "   [build]: <./Makefile#targets>\n",
+            "[build]:\n  ./Makefile\n  'Build'\n",
         ]:
             with self.subTest(text=text):
                 self.assertTrue(cp.readme_names(text, "Makefile"))
@@ -246,6 +282,15 @@ class ReadmeNamesTest(unittest.TestCase):
             ("verify.py", "See [it](./scripts/verify.py)."),
             ("main", "Pushes to `main-branch`."),
             ("a.md", "See [it](./a.md.bak)."),
+            ("Makefile", 'See [it](./Makefile.bak "Build").'),
+            ("Makefile", 'See [it](./Makefile "Build" extra).'),
+            ("Makefile", "See [it](\n\n./Makefile)."),
+            ("Makefile", "[it]: ./Makefile.bak"),
+            ("Makefile", "[it]: ./scripts/Makefile"),
+            ("Makefile", "[it]: ./Makefile and more words"),
+            ("Makefile", "Text [it]: ./Makefile"),
+            ("Makefile", "    [it]: ./Makefile"),
+            ("Makefile", "[^1]: ./Makefile"),
         ]:
             with self.subTest(name=name, text=text):
                 self.assertFalse(cp.readme_names(text, name))
