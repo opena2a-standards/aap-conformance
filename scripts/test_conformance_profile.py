@@ -58,8 +58,7 @@ class ReadmeTableCheck(unittest.TestCase):
                 yield
 
     def problems(self, text: str) -> list[str]:
-        with self.readme_text(text):
-            return cp.check_readme_table(PROFILE)
+        return cp.check_readme_table(PROFILE, text)
 
     def test_one_row_per_fixture_passes(self):
         self.assertEqual(self.problems(readme(ROW_A, ROW_B)), [])
@@ -93,7 +92,7 @@ class ReadmeTableCheck(unittest.TestCase):
         self.assertEqual(self.problems(readme(row, ROW_B)), [])
 
     def test_committed_readme_passes(self):
-        self.assertEqual(cp.check_readme_table(cp.build()), [])
+        self.assertEqual(cp.check_readme_table(cp.build(), cp.README.read_text()), [])
 
     def test_check_exits_1_on_committed_readme_with_a_duplicated_row(self):
         text, fixture = duplicate_first_fixture_row(cp.README.read_text())
@@ -137,8 +136,10 @@ class CheckReadmeTest(unittest.TestCase):
         result = self.check()
         self.assertEqual(result.returncode, 1)
         self.assertNotIn("Traceback", result.stderr)
-        self.assertIn("README.md: cannot be read (No such file or directory)", result.stdout.splitlines())
-        self.assertIn("conformance.json is current", result.stdout)
+        self.assertEqual(
+            result.stdout.splitlines(),
+            ["conformance.json is current", "README.md: cannot be read (No such file or directory)"],
+        )
 
     def test_unreadable_readme_is_a_one_line_problem(self) -> None:
         (self.root / "README.md").unlink()
@@ -146,8 +147,9 @@ class CheckReadmeTest(unittest.TestCase):
         result = self.check()
         self.assertEqual(result.returncode, 1)
         self.assertNotIn("Traceback", result.stderr)
-        problems = [line for line in result.stdout.splitlines() if line.startswith("README.md: cannot be read (")]
+        problems = [line for line in result.stdout.splitlines() if "README.md" in line]
         self.assertEqual(len(problems), 1, result.stdout)
+        self.assertTrue(problems[0].startswith("README.md: cannot be read ("), result.stdout)
 
 
 if __name__ == "__main__":
