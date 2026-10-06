@@ -6,7 +6,8 @@ one row per fixture: a missing row, a row for a fixture that does not exist,
 and a fixture named in more than one row are each reported, indented rows
 included. A file the script cannot read or decode, and a conformance.json it cannot
 write, is a one-line problem, not a traceback, and an argument other than
-`--check` writes nothing.
+`--check` writes nothing. conformance.json is written and read as UTF-8 even
+under a locale whose encoding is not UTF-8.
 
 The CheckReadmeTest tests run the script from a temporary copy of the files it
 reads, so the repository's own README.md and conformance.json are never touched.
@@ -17,8 +18,10 @@ Usage:
 """
 from __future__ import annotations
 
+import codecs
 import contextlib
 import io
+import os
 import shutil
 import subprocess
 import sys
@@ -124,6 +127,10 @@ class ReadmeTableCheck(unittest.TestCase):
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+# A locale whose encoding is not UTF-8. Where it is not installed, an LC_ALL
+# naming it leaves Python in the C locale, whose ASCII encoding is not UTF-8
+# either.
+NON_UTF8_LOCALE = "en_US.ISO8859-1"
 
 
 class CheckReadmeTest(unittest.TestCase):
@@ -146,6 +153,31 @@ class CheckReadmeTest(unittest.TestCase):
 
     def check(self) -> subprocess.CompletedProcess:
         return self.run_script("--check")
+
+    def run_script_in_non_utf8_locale(self, *args: str) -> subprocess.CompletedProcess:
+        env = dict(os.environ, LC_ALL=NON_UTF8_LOCALE, PYTHONUTF8="0")
+        encoding = subprocess.run(
+            [sys.executable, "-c", "import locale; print(locale.getpreferredencoding(False))"],
+            capture_output=True,
+            text=True,
+            env=env,
+            check=True,
+        ).stdout.strip()
+        if codecs.lookup(encoding).name == "utf-8":
+            self.skipTest(f"Python still defaults to UTF-8 under LC_ALL={NON_UTF8_LOCALE} PYTHONUTF8=0")
+        return subprocess.run(
+            [sys.executable, str(self.root / "scripts" / "conformance_profile.py"), *args],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+    def committed_profile_bytes(self) -> bytes:
+        data = (REPO_ROOT / "conformance.json").read_bytes()
+        # Without non-ASCII text, UTF-8 and the locale's encoding would write
+        # the same bytes and the locale tests could not tell them apart.
+        self.assertTrue(any(byte > 0x7F for byte in data), "conformance.json has no non-ASCII text")
+        return data
 
     def assert_problems(self, result: subprocess.CompletedProcess, lines: list[str]) -> None:
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
@@ -202,6 +234,19 @@ class CheckReadmeTest(unittest.TestCase):
         (self.root / "conformance.json").mkdir()
         self.assert_problems(self.run_script(), ["conformance.json: cannot be written (Is a directory)"])
 
+    def test_conformance_json_is_written_as_utf8_in_a_non_utf8_locale(self) -> None:
+        expected = self.committed_profile_bytes()
+        (self.root / "conformance.json").write_text("{}\n")
+        result = self.run_script_in_non_utf8_locale()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual((self.root / "conformance.json").read_bytes(), expected)
+
+    def test_check_reads_conformance_json_as_utf8_in_a_non_utf8_locale(self) -> None:
+        self.committed_profile_bytes()
+        result = self.run_script_in_non_utf8_locale("--check")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("conformance.json is current", result.stdout.splitlines())
+
     def test_fixture_not_json_is_a_one_line_problem(self) -> None:
         (self.root / "fixtures" / "ait-compact-valid.json").write_text("{not json\n")
         self.assert_problems(
@@ -211,6 +256,15 @@ class CheckReadmeTest(unittest.TestCase):
                 " (Expecting property name enclosed in double quotes, line 1 column 2)"
             ],
         )
+
+    def test_fixture_with_too_long_integer_is_a_one_line_problem(self) -> None:
+        (self.root / "fixtures" / "ait-compact-valid.json").write_text('{"big": ' + "1" * 5000 + "}\n")
+        result = self.check()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        lines = result.stdout.splitlines()
+        self.assertEqual(len(lines), 1, result.stdout)
+        self.assertRegex(lines[0], r"^fixtures/ait-compact-valid\.json: not valid JSON \(.*integer.*\)$")
 
     def test_each_unusable_fixture_is_a_one_line_problem(self) -> None:
         fixtures = self.root / "fixtures"

@@ -185,6 +185,9 @@ def requirement(path: Path) -> dict:
         fx = json.loads(read_utf8(path))
     except json.JSONDecodeError as exc:
         raise ReadError(f"not valid JSON ({exc.msg}, line {exc.lineno} column {exc.colno})") from None
+    except ValueError as exc:
+        # An integer literal past the interpreter's digit limit.
+        raise ReadError(f"not valid JSON ({exc})") from None
     try:
         expected = fx["expected"]
         outcome = expected["verifyResult"]
