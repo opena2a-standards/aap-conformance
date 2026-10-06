@@ -16,12 +16,17 @@ root file is left unexplained. Where git cannot list the tracked files (a
 source archive, a temporary copy, or a checkout where git is missing or fails)
 the root files that the root `.gitignore` does not exclude stand in for them.
 
+A file that cannot be read, is not valid UTF-8, or (for a fixture) is not a
+valid fixture is reported as a one-line problem naming it, with exit 1.
+
 Usage:
     python3 scripts/conformance_profile.py            # (re)write conformance.json
     python3 scripts/conformance_profile.py --check    # exit 1 if conformance.json, the README table or a root file is stale
+    python3 scripts/conformance_profile.py --help     # print usage; any other argument is an error and writes nothing
 """
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import re
@@ -148,26 +153,72 @@ SUITE = {
 }
 
 
-def build() -> dict:
-    requirements = []
-    for path in sorted((REPO_ROOT / "fixtures").glob("*.json")):
-        fx = json.loads(path.read_text())
+class ReadError(Exception):
+    """A file cannot be used; the message is the one-line reason."""
+
+
+class FixtureError(Exception):
+    """Fixtures cannot be read into the profile; the message has one line per fixture."""
+
+
+def read_utf8(path: Path) -> str:
+    """The text of `path`, decoded as UTF-8.
+
+    Raises ReadError when the file cannot be read or is not valid UTF-8.
+    """
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ReadError(f"cannot be read ({exc.strerror or exc})") from None
+    except UnicodeDecodeError:
+        raise ReadError("cannot be read (not valid UTF-8)") from None
+
+
+def requirement(path: Path) -> dict:
+    """The profile entry for the fixture at `path`.
+
+    Raises ReadError when the fixture cannot be read, is not valid JSON, or
+    lacks a member the entry is built from.
+    """
+    try:
+        fx = json.loads(read_utf8(path))
+    except json.JSONDecodeError as exc:
+        raise ReadError(f"not valid JSON ({exc.msg}, line {exc.lineno} column {exc.colno})") from None
+    try:
         expected = fx["expected"]
         outcome = expected["verifyResult"]
         if expected.get("rejectCategory"):
             outcome = f"REJECT[{expected['rejectCategory']}]"
-        requirements.append(
-            {
-                "fixture": f"fixtures/{path.name}",
-                "name": fx["name"],
-                "fixtureType": fx["fixtureType"],
-                "tokenForm": fx["tokenForm"],
-                "level": "MUST",
-                "specRefs": fx["spec"],
-                "expected": outcome,
-                "description": fx["description"],
-            }
-        )
+        return {
+            "fixture": f"fixtures/{path.name}",
+            "name": fx["name"],
+            "fixtureType": fx["fixtureType"],
+            "tokenForm": fx["tokenForm"],
+            "level": "MUST",
+            "specRefs": fx["spec"],
+            "expected": outcome,
+            "description": fx["description"],
+        }
+    except KeyError as exc:
+        raise ReadError(f'has no "{exc.args[0]}" member') from None
+    except TypeError:
+        raise ReadError("is not a fixture object") from None
+
+
+def build() -> dict:
+    """The profile derived from `fixtures/`.
+
+    Raises FixtureError naming every fixture that cannot be read into it.
+    """
+    requirements = []
+    problems = []
+    for path in sorted((REPO_ROOT / "fixtures").glob("*.json")):
+        try:
+            requirements.append(requirement(path))
+        except ReadError as exc:
+            problems.append(f"fixtures/{path.name}: {exc}")
+    if problems:
+        raise FixtureError("\n".join(problems))
     profile = dict(SUITE)
     profile["requirements"] = requirements
     return profile
@@ -177,7 +228,8 @@ def readme_table_fixtures(readme: str) -> list[str] | None:
     """Fixture paths named in the "What this suite verifies" table of README text `readme`.
 
     One entry per table row that names the fixture, so a fixture named in two
-    rows appears twice. Returns None when the table cannot be found.
+    rows appears twice. A row may be indented. Returns None when the table
+    cannot be found.
     """
     lines = readme.splitlines()
     if README_TABLE_MARKER not in lines:
@@ -185,7 +237,7 @@ def readme_table_fixtures(readme: str) -> list[str] | None:
     named: list[str] = []
     in_table = False
     for line in lines[lines.index(README_TABLE_MARKER) + 1 :]:
-        if line.startswith("|"):
+        if line.lstrip().startswith("|"):
             in_table = True
             named += dict.fromkeys(README_FIXTURE_REF.findall(line))
         elif in_table or line.strip():
@@ -432,23 +484,49 @@ def check_root_files(readme: str) -> list[str]:
     return problems
 
 
-def main() -> int:
-    profile = build()
+def check_profile_file(rendered: str) -> str | None:
+    """The problem with the committed conformance.json, or None when it matches `rendered`."""
+    if not OUT.exists():
+        return "conformance.json missing; run scripts/conformance_profile.py"
+    try:
+        committed = read_utf8(OUT)
+    except ReadError as exc:
+        return f"conformance.json: {exc}"
+    if committed != rendered:
+        return "conformance.json is stale; run scripts/conformance_profile.py"
+    return None
+
+
+def parse_args(argv: list[str] | None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        prog="conformance_profile.py",
+        description="Write conformance.json from the fixtures, or with --check verify it and the README.",
+        allow_abbrev=False,
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="write nothing; exit 1 if conformance.json, the README table or a root file is stale",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    try:
+        profile = build()
+    except FixtureError as exc:
+        print(exc)
+        return 1
     rendered = json.dumps(profile, indent=2, ensure_ascii=False) + "\n"
-    if "--check" in sys.argv:
-        rc = 0
-        if not OUT.exists():
-            print("conformance.json missing; run scripts/conformance_profile.py")
-            rc = 1
-        elif OUT.read_text() != rendered:
-            print("conformance.json is stale; run scripts/conformance_profile.py")
-            rc = 1
-        else:
-            print("conformance.json is current")
+    if args.check:
+        profile_problem = check_profile_file(rendered)
+        print(profile_problem or "conformance.json is current")
+        rc = 1 if profile_problem else 0
         try:
-            readme = README.read_text()
-        except OSError as exc:
-            print(f"README.md: cannot be read ({exc.strerror or exc})")
+            readme = read_utf8(README)
+        except ReadError as exc:
+            print(f"README.md: {exc}")
             return 1
         problems = check_readme_table(profile, readme)
         for problem in problems:
@@ -465,7 +543,7 @@ def main() -> int:
         else:
             print("README.md names every root file")
         return rc
-    OUT.write_text(rendered)
+    OUT.write_text(rendered, encoding="utf-8")
     print(f"wrote conformance.json ({len(profile['requirements'])} requirements)")
     return 0
 
