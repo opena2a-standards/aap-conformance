@@ -235,8 +235,9 @@ enforces every claim in this README on each push and pull request:
    reject category, and publishes `parity-report.json` as a CI artifact.
 6. `conformance.json` must match the fixture set, the Scope table above
    must have exactly one row for every fixture, and every tracked file at
-   the repository root must be named in this README, except the ones git
-   and npm read by convention (`.gitignore`, `LICENSE`, `package.json`,
+   the repository root must be named in this README, backticked or as a
+   link target, except the ones git and npm read by convention
+   (`.gitignore`, `LICENSE`, `README.md`, `package.json`,
    `package-lock.json`).
 7. On every push to `main`, CI keyless-signs `MANIFEST.sha256` with Sigstore
    cosign (Rekor is the durable record) — see
