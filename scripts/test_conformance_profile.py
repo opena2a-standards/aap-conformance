@@ -266,6 +266,13 @@ class CheckReadmeTest(unittest.TestCase):
         self.assertEqual(len(lines), 1, result.stdout)
         self.assertRegex(lines[0], r"^fixtures/ait-compact-valid\.json: not valid JSON \(.*integer.*\)$")
 
+    def test_fixture_nested_too_deeply_is_a_one_line_problem(self) -> None:
+        depth = 1_000_000
+        (self.root / "fixtures" / "ait-compact-valid.json").write_text("[" * depth + "]" * depth)
+        self.assert_problems(
+            self.check(), ["fixtures/ait-compact-valid.json: not valid JSON (nested too deeply to parse)"]
+        )
+
     def test_each_unusable_fixture_is_a_one_line_problem(self) -> None:
         fixtures = self.root / "fixtures"
         (fixtures / "ait-compact-valid.json").write_bytes(b"\xff{}")
