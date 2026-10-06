@@ -148,6 +148,15 @@ class RootFileRuleTest(unittest.TestCase):
         (self.root / ".DS_Store").write_text("")
         self.assert_passes()
 
+    def test_non_git_copy_reads_a_gitignore_that_starts_with_a_byte_order_mark(self) -> None:
+        # Git skips a UTF-8 byte-order mark at the start of .gitignore, so its
+        # first pattern still applies.
+        (self.root / ".gitignore").write_bytes(b"\xef\xbb\xbfNOTES.md\n")
+        (self.root / "NOTES.md").write_text("notes\n")
+        with mock.patch.object(cp, "REPO_ROOT", self.root):
+            self.assertNotIn("NOTES.md", cp.root_files())
+        self.assert_passes()
+
     def test_name_inside_a_longer_path_does_not_name_the_root_file(self) -> None:
         self.assertIn("verify.py", (self.root / "README.md").read_text())
         (self.root / "verify.py").write_text("x\n")
