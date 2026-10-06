@@ -188,6 +188,9 @@ def requirement(path: Path) -> dict:
     except ValueError as exc:
         # An integer literal past the interpreter's digit limit.
         raise ReadError(f"not valid JSON ({exc})") from None
+    except RecursionError:
+        # Arrays or objects nested past the parser's depth limit.
+        raise ReadError("not valid JSON (nested too deeply to parse)") from None
     try:
         expected = fx["expected"]
         outcome = expected["verifyResult"]
