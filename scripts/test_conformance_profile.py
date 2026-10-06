@@ -10,7 +10,9 @@ write, is a one-line problem, not a traceback, and an argument other than
 under a locale whose encoding is not UTF-8.
 
 The CheckReadmeTest tests run the script from a temporary copy of the files it
-reads, so the repository's own README.md and conformance.json are never touched.
+reads, so the repository's own README.md and conformance.json are never touched,
+and with Python's default integer digit limit, so a PYTHONINTMAXSTRDIGITS in the
+caller's environment does not change what the script reports.
 
 Usage:
     python3 scripts/test_conformance_profile.py
@@ -131,6 +133,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # naming it leaves Python in the C locale, whose ASCII encoding is not UTF-8
 # either.
 NON_UTF8_LOCALE = "en_US.ISO8859-1"
+# Python's default limit on the digits of an integer literal. The script runs
+# with it whatever PYTHONINTMAXSTRDIGITS the tests inherit, so a fixture's
+# too-long integer is always refused.
+INT_MAX_STR_DIGITS = "4300"
 
 
 class CheckReadmeTest(unittest.TestCase):
@@ -144,18 +150,22 @@ class CheckReadmeTest(unittest.TestCase):
         shutil.copy2(REPO_ROOT / "conformance.json", self.root)
         shutil.copy2(REPO_ROOT / "README.md", self.root)
 
+    def script_env(self, **overrides: str) -> dict[str, str]:
+        return dict(os.environ, PYTHONINTMAXSTRDIGITS=INT_MAX_STR_DIGITS, **overrides)
+
     def run_script(self, *args: str) -> subprocess.CompletedProcess:
         return subprocess.run(
             [sys.executable, str(self.root / "scripts" / "conformance_profile.py"), *args],
             capture_output=True,
             text=True,
+            env=self.script_env(),
         )
 
     def check(self) -> subprocess.CompletedProcess:
         return self.run_script("--check")
 
     def run_script_in_non_utf8_locale(self, *args: str) -> subprocess.CompletedProcess:
-        env = dict(os.environ, LC_ALL=NON_UTF8_LOCALE, PYTHONUTF8="0")
+        env = self.script_env(LC_ALL=NON_UTF8_LOCALE, PYTHONUTF8="0")
         encoding = subprocess.run(
             [sys.executable, "-c", "import locale; print(locale.getpreferredencoding(False))"],
             capture_output=True,
@@ -257,7 +267,7 @@ class CheckReadmeTest(unittest.TestCase):
             ],
         )
 
-    def test_fixture_with_too_long_integer_is_a_one_line_problem(self) -> None:
+    def assert_too_long_integer_is_a_one_line_problem(self) -> None:
         (self.root / "fixtures" / "ait-compact-valid.json").write_text('{"big": ' + "1" * 5000 + "}\n")
         result = self.check()
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
@@ -272,6 +282,14 @@ class CheckReadmeTest(unittest.TestCase):
         self.assert_problems(
             self.check(), ["fixtures/ait-compact-valid.json: not valid JSON (nested too deeply to parse)"]
         )
+
+    def test_fixture_with_too_long_integer_is_a_one_line_problem(self) -> None:
+        self.assert_too_long_integer_is_a_one_line_problem()
+
+    def test_too_long_integer_ignores_an_inherited_digit_limit(self) -> None:
+        # 0 lifts the limit, so a script inheriting it would parse the integer.
+        with mock.patch.dict(os.environ, {"PYTHONINTMAXSTRDIGITS": "0"}):
+            self.assert_too_long_integer_is_a_one_line_problem()
 
     def test_each_unusable_fixture_is_a_one_line_problem(self) -> None:
         fixtures = self.root / "fixtures"
