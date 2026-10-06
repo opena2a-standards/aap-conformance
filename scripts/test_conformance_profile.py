@@ -3,7 +3,10 @@
 
 `--check` must hold the README's "What this suite verifies" table to exactly
 one row per fixture: a missing row, a row for a fixture that does not exist,
-and a fixture named in more than one row are each reported.
+and a fixture named in more than one row are each reported, indented rows
+included. A file the script cannot read or decode, and a conformance.json it cannot
+write, is a one-line problem, not a traceback, and an argument other than
+`--check` writes nothing.
 
 The CheckReadmeTest tests run the script from a temporary copy of the files it
 reads, so the repository's own README.md and conformance.json are never touched.
@@ -87,6 +90,21 @@ class ReadmeTableCheck(unittest.TestCase):
             ],
         )
 
+    def test_indented_row_does_not_end_the_table(self):
+        self.assertEqual(self.problems(readme(ROW_A, "   " + ROW_B)), [])
+
+    def test_indented_duplicated_row_is_reported(self):
+        self.assertEqual(
+            self.problems(readme(ROW_A, ROW_B, "   " + ROW_A)),
+            ["README.md table names fixtures/a.json in 2 rows"],
+        )
+
+    def test_indented_unknown_fixture_is_reported(self):
+        self.assertEqual(
+            self.problems(readme(ROW_A, ROW_B, "\t| Item C | `fixtures/c.json` |")),
+            ["README.md table names fixtures/c.json, which is not in fixtures/"],
+        )
+
     def test_fixture_named_twice_in_one_row_is_one_row(self):
         row = "| Item A, see `fixtures/a.json` | `fixtures/a.json` |"
         self.assertEqual(self.problems(readme(row, ROW_B)), [])
@@ -119,12 +137,20 @@ class CheckReadmeTest(unittest.TestCase):
         shutil.copy2(REPO_ROOT / "conformance.json", self.root)
         shutil.copy2(REPO_ROOT / "README.md", self.root)
 
-    def check(self) -> subprocess.CompletedProcess:
+    def run_script(self, *args: str) -> subprocess.CompletedProcess:
         return subprocess.run(
-            [sys.executable, str(self.root / "scripts" / "conformance_profile.py"), "--check"],
+            [sys.executable, str(self.root / "scripts" / "conformance_profile.py"), *args],
             capture_output=True,
             text=True,
         )
+
+    def check(self) -> subprocess.CompletedProcess:
+        return self.run_script("--check")
+
+    def assert_problems(self, result: subprocess.CompletedProcess, lines: list[str]) -> None:
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertEqual(result.stdout.splitlines(), lines)
 
     def test_current_repo_passes(self) -> None:
         result = self.check()
@@ -150,6 +176,81 @@ class CheckReadmeTest(unittest.TestCase):
         problems = [line for line in result.stdout.splitlines() if "README.md" in line]
         self.assertEqual(len(problems), 1, result.stdout)
         self.assertTrue(problems[0].startswith("README.md: cannot be read ("), result.stdout)
+
+    def test_readme_not_utf8_is_a_one_line_problem(self) -> None:
+        path = self.root / "README.md"
+        path.write_bytes(b"\xff\xfe" + path.read_bytes())
+        self.assert_problems(
+            self.check(), ["conformance.json is current", "README.md: cannot be read (not valid UTF-8)"]
+        )
+
+    def test_unreadable_conformance_json_is_a_one_line_problem(self) -> None:
+        (self.root / "conformance.json").unlink()
+        (self.root / "conformance.json").mkdir()
+        fixtures = len(list((self.root / "fixtures").glob("*.json")))
+        self.assert_problems(
+            self.check(),
+            [
+                "conformance.json: cannot be read (Is a directory)",
+                f"README.md table names all {fixtures} fixtures",
+                "README.md names every root file",
+            ],
+        )
+
+    def test_unwritable_conformance_json_is_a_one_line_problem(self) -> None:
+        (self.root / "conformance.json").unlink()
+        (self.root / "conformance.json").mkdir()
+        self.assert_problems(self.run_script(), ["conformance.json: cannot be written (Is a directory)"])
+
+    def test_fixture_not_json_is_a_one_line_problem(self) -> None:
+        (self.root / "fixtures" / "ait-compact-valid.json").write_text("{not json\n")
+        self.assert_problems(
+            self.check(),
+            [
+                "fixtures/ait-compact-valid.json: not valid JSON"
+                " (Expecting property name enclosed in double quotes, line 1 column 2)"
+            ],
+        )
+
+    def test_each_unusable_fixture_is_a_one_line_problem(self) -> None:
+        fixtures = self.root / "fixtures"
+        (fixtures / "ait-compact-valid.json").write_bytes(b"\xff{}")
+        (fixtures / "zz-empty.json").write_text("{}")
+        (fixtures / "zz-list.json").write_text("[]")
+        self.assert_problems(
+            self.check(),
+            [
+                "fixtures/ait-compact-valid.json: cannot be read (not valid UTF-8)",
+                'fixtures/zz-empty.json: has no "expected" member',
+                "fixtures/zz-list.json: is not a fixture object",
+            ],
+        )
+
+    def test_unusable_fixture_writes_nothing(self) -> None:
+        (self.root / "fixtures" / "ait-compact-valid.json").write_text("{not json\n")
+        before = (self.root / "conformance.json").read_bytes()
+        result = self.run_script()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertEqual((self.root / "conformance.json").read_bytes(), before)
+
+    def test_help_prints_usage_and_writes_nothing(self) -> None:
+        (self.root / "conformance.json").write_text("{}\n")
+        result = self.run_script("--help")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue(result.stdout.startswith("usage: conformance_profile.py"), result.stdout)
+        self.assertNotIn("wrote conformance.json", result.stdout)
+        self.assertEqual((self.root / "conformance.json").read_text(), "{}\n")
+
+    def test_unknown_argument_is_an_error_and_writes_nothing(self) -> None:
+        for arg in ("--chek", "--ch", "check"):
+            with self.subTest(arg=arg):
+                (self.root / "conformance.json").write_text("{}\n")
+                result = self.run_script(arg)
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                self.assertTrue(result.stderr.startswith("usage: conformance_profile.py"), result.stderr)
+                self.assertEqual(result.stdout, "")
+                self.assertEqual((self.root / "conformance.json").read_text(), "{}\n")
 
 
 if __name__ == "__main__":
