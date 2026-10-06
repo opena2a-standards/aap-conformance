@@ -212,6 +212,15 @@ class CheckReadmeTest(unittest.TestCase):
             ],
         )
 
+    def test_fixture_with_too_long_integer_is_a_one_line_problem(self) -> None:
+        (self.root / "fixtures" / "ait-compact-valid.json").write_text('{"big": ' + "1" * 5000 + "}\n")
+        result = self.check()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        lines = result.stdout.splitlines()
+        self.assertEqual(len(lines), 1, result.stdout)
+        self.assertRegex(lines[0], r"^fixtures/ait-compact-valid\.json: not valid JSON \(.*integer.*\)$")
+
     def test_each_unusable_fixture_is_a_one_line_problem(self) -> None:
         fixtures = self.root / "fixtures"
         (fixtures / "ait-compact-valid.json").write_bytes(b"\xff{}")
