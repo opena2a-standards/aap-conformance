@@ -397,12 +397,23 @@ def root_files() -> list[str]:
 def readme_names(readme: str, name: str) -> bool:
     """Whether README text `readme` names the root file `name`.
 
-    The name counts when it appears backticked (`NAME`) or as the target of a
-    link to it (`](NAME)`, `](./NAME)`, optionally with a `#fragment`), not
-    when it is only part of a longer path or word.
+    The name counts when it appears backticked (`NAME`) or as the whole target
+    of a link to it, written `NAME` or `./NAME`, optionally with a `#fragment`
+    and optionally in angle brackets: an inline link (`](./NAME)`, also with a
+    title, `](./NAME "Title")`) or a reference definition at the start of a
+    line (`[label]: ./NAME`, also with a title). It does not count when it is
+    only part of a longer path or word.
     """
     name = re.escape(name)
-    return re.search(rf"`{name}`|\]\((?:\./)?{name}(?:#[^)]*)?\)", readme) is not None
+    # Whitespace with at most one line ending, as CommonMark allows around a
+    # link destination and title; `sep` is the same but must not be empty.
+    ws = r"[ \t]*(?:\n[ \t]*)?"
+    sep = rf"(?=[ \t\n]){ws}"
+    target = rf"(?:<(?:\./)?{name}(?:#[^>\n]*)?>|(?:\./)?{name}(?:#[^\s()<>]*)?)"
+    title = r"""(?:"[^"]*"|'[^']*'|\([^()]*\))"""
+    inline = rf"\]\({ws}{target}(?:{sep}{title})?{ws}\)"
+    reference = rf"^ {{0,3}}\[(?!\^)[^\[\]]+\]:{ws}{target}(?:{sep}{title})?[ \t]*$"
+    return re.search(rf"`{name}`|{inline}|{reference}", readme, re.MULTILINE) is not None
 
 
 def check_root_files(readme: str) -> list[str]:
