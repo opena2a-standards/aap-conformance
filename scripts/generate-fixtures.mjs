@@ -1016,6 +1016,32 @@ fixture("cgt-compact-cnf-bad-proof-signature", {
   token: CGT_FGC_TOKEN,
 });
 
+fixture("cgt-compact-unknown-key", {
+  description:
+    "Byte-identical to cgt-compact-valid (the §4.2 CGT claim set, header kid broker-key-1, a valid Ed25519 signature); only the verifier state differs — its key set holds registry-key-1 but not broker-key-1. A verifier that cannot resolve the header's kid has no key to verify the signature with, so it MUST fail closed rather than fall back to another key or accept unverified. The token and its signature are valid; the missing key is the sole defect. Verifier MUST REJECT with UNKNOWN_KEY.",
+  fixtureType: "cgt",
+  tokenForm: "compact",
+  spec: [ref("§9.3 Compact Serialization"), ref("§9.2 Protected Header (closed v1 header)"), RFC7515],
+  verifierState: state(["registry-key-1"]),
+  expected: { verifyResult: "REJECT", rejectCategory: "UNKNOWN_KEY", reasonContains: "not in" },
+  schemaValid: true,
+  headerSchemaValid: true,
+  token: CGT_TOKEN,
+});
+
+fixture("cgt-compact-kid-suite-mismatch", {
+  description:
+    "The §4.2 CGT claim set in compact form with a header declaring alg EdDSA and kid broker-pqc-1, which the verifier's key set holds as an ML-DSA-65 key; the signature is broker-pqc-1's genuine ML-DSA-65 signature over those exact bytes. The kid does not name a key of the declared suite, so the verifier has no key for this (kid, alg) pair and MUST fail closed instead of verifying under the key's own suite. The claims are schema-valid and unexpired; the kid/alg mismatch is the sole defect. Verifier MUST REJECT with UNKNOWN_KEY.",
+  fixtureType: "cgt",
+  tokenForm: "compact",
+  spec: [ref("§9.5 Suite Registry (v1)"), ref("§8.2 Cryptographic Agility (no silent downgrade)"), ref("§9.3 Compact Serialization"), RFC7515],
+  verifierState: state(["broker-key-1", "broker-pqc-1"]),
+  expected: { verifyResult: "REJECT", rejectCategory: "UNKNOWN_KEY", reasonContains: "suite" },
+  schemaValid: true,
+  headerSchemaValid: true,
+  token: mintCompact("broker-pqc-1", compactHeader("broker-pqc-1", "EdDSA"), cgtClaims()),
+});
+
 fixture("da-compact-authorization-details-widened", {
   description:
     "The §5.5 DA claim set with the data entry's fieldsAllowed widened to [id, status, total, customer.name] against the §4.7 delegator grant, whose data entry allows [id, status, total]. §5.4: fieldsAllowed is an allow set member, so the delegatee's set MUST be a subset of the delegator's; an entry with no delegator entry it is narrower than or equal to makes the DA invalid. Scope, trust_class, the budget entry, max_depth and the presenter proof (agent-key-2) are all valid; the widened allow set is the sole defect. Verifier MUST REJECT with NOT_ATTENUATED.",

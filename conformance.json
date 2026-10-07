@@ -563,6 +563,37 @@
       "description": "A CGT whose jti is uppercase hex. §8.1 pins jti as 16 random bytes LOWERCASE hex (^[0-9a-f]{32}$); a case-insensitive validator lets two encodings of the same replay id through dedup. The signature is valid. Verifier MUST REJECT with CLAIM_SCHEMA."
     },
     {
+      "fixture": "fixtures/cgt-compact-kid-suite-mismatch.json",
+      "name": "aap-v1/cgt-compact-kid-suite-mismatch",
+      "fixtureType": "cgt",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§9.5 Suite Registry (v1)"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§8.2 Cryptographic Agility (no silent downgrade)"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§9.3 Compact Serialization"
+        },
+        {
+          "id": "RFC 7515",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc7515",
+          "section": "JSON Web Signature"
+        }
+      ],
+      "expected": "REJECT[UNKNOWN_KEY]",
+      "description": "The §4.2 CGT claim set in compact form with a header declaring alg EdDSA and kid broker-pqc-1, which the verifier's key set holds as an ML-DSA-65 key; the signature is broker-pqc-1's genuine ML-DSA-65 signature over those exact bytes. The kid does not name a key of the declared suite, so the verifier has no key for this (kid, alg) pair and MUST fail closed instead of verifying under the key's own suite. The claims are schema-valid and unexpired; the kid/alg mismatch is the sole defect. Verifier MUST REJECT with UNKNOWN_KEY."
+    },
+    {
       "fixture": "fixtures/cgt-compact-missing-trust-class.json",
       "name": "aap-v1/cgt-compact-missing-trust-class",
       "fixtureType": "cgt",
@@ -635,6 +666,32 @@
       ],
       "expected": "REJECT[UNKNOWN_ALG]",
       "description": "A CGT whose protected header declares alg ES256 — a suite absent from the §9.5 registry. The verifier MUST reject an alg it does not support rather than silently downgrade or guess (§8.2); rejection happens at the header stage, before any signature evaluation. Verifier MUST REJECT with UNKNOWN_ALG."
+    },
+    {
+      "fixture": "fixtures/cgt-compact-unknown-key.json",
+      "name": "aap-v1/cgt-compact-unknown-key",
+      "fixtureType": "cgt",
+      "tokenForm": "compact",
+      "level": "MUST",
+      "specRefs": [
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§9.3 Compact Serialization"
+        },
+        {
+          "id": "AAP",
+          "ref": "https://github.com/opena2a-standards/agent-authorization-protocol/blob/main/AAP-SPEC.md",
+          "section": "§9.2 Protected Header (closed v1 header)"
+        },
+        {
+          "id": "RFC 7515",
+          "ref": "https://datatracker.ietf.org/doc/html/rfc7515",
+          "section": "JSON Web Signature"
+        }
+      ],
+      "expected": "REJECT[UNKNOWN_KEY]",
+      "description": "Byte-identical to cgt-compact-valid (the §4.2 CGT claim set, header kid broker-key-1, a valid Ed25519 signature); only the verifier state differs — its key set holds registry-key-1 but not broker-key-1. A verifier that cannot resolve the header's kid has no key to verify the signature with, so it MUST fail closed rather than fall back to another key or accept unverified. The token and its signature are valid; the missing key is the sole defect. Verifier MUST REJECT with UNKNOWN_KEY."
     },
     {
       "fixture": "fixtures/cgt-compact-valid.json",
