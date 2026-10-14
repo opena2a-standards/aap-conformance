@@ -7,8 +7,8 @@ DERIVED from the fixtures themselves (each fixture carries its spec
 references and expected block), so the profile cannot drift from the fixture
 set: regeneration is deterministic and CI verifies the committed file matches.
 
-`--check` also verifies the human-readable counterpart: the README's
-"What this suite verifies" table must have exactly one row for every fixture
+`--check` also verifies the human-readable counterpart: the "What this suite
+verifies" table in `docs/scope.md` must have exactly one row for every fixture
 in `fixtures/` and name no fixture that does not exist. It also requires every
 tracked file at the repository root to be named in the README, as a backticked
 name or a link target, except the files git and npm read by convention, so no
@@ -22,7 +22,7 @@ a one-line problem naming it, with exit 1.
 
 Usage:
     python3 scripts/conformance_profile.py            # (re)write conformance.json
-    python3 scripts/conformance_profile.py --check    # exit 1 if conformance.json, the README table or a root file is stale
+    python3 scripts/conformance_profile.py --check    # exit 1 if conformance.json, the docs/scope.md table or a root file is stale
     python3 scripts/conformance_profile.py --help     # print usage; any other argument is an error and writes nothing
 """
 from __future__ import annotations
@@ -39,8 +39,9 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 OUT = REPO_ROOT / "conformance.json"
 README = REPO_ROOT / "README.md"
-README_TABLE_MARKER = "What this suite verifies:"
-README_FIXTURE_REF = re.compile(r"`(fixtures/[A-Za-z0-9._-]+\.json)`")
+SCOPE = REPO_ROOT / "docs" / "scope.md"
+SCOPE_TABLE_MARKER = "What this suite verifies:"
+SCOPE_FIXTURE_REF = re.compile(r"`(fixtures/[A-Za-z0-9._-]+\.json)`")
 # Root files that git or npm read by convention; every other tracked root file
 # must be named in the README.
 ROOT_CONVENTION_FILES = {".gitignore", "LICENSE", "README.md", "package.json", "package-lock.json"}
@@ -231,36 +232,36 @@ def build() -> dict:
     return profile
 
 
-def readme_table_fixtures(readme: str) -> list[str] | None:
-    """Fixture paths named in the "What this suite verifies" table of README text `readme`.
+def scope_table_fixtures(scope: str) -> list[str] | None:
+    """Fixture paths named in the "What this suite verifies" table of docs/scope.md text `scope`.
 
     One entry per table row that names the fixture, so a fixture named in two
     rows appears twice. A row may be indented. Returns None when the table
     cannot be found.
     """
-    lines = readme.splitlines()
-    if README_TABLE_MARKER not in lines:
+    lines = scope.splitlines()
+    if SCOPE_TABLE_MARKER not in lines:
         return None
     named: list[str] = []
     in_table = False
-    for line in lines[lines.index(README_TABLE_MARKER) + 1 :]:
+    for line in lines[lines.index(SCOPE_TABLE_MARKER) + 1 :]:
         if line.lstrip().startswith("|"):
             in_table = True
-            named += dict.fromkeys(README_FIXTURE_REF.findall(line))
+            named += dict.fromkeys(SCOPE_FIXTURE_REF.findall(line))
         elif in_table or line.strip():
             break
     return named if in_table else None
 
 
-def check_readme_table(profile: dict, readme: str) -> list[str]:
-    named = readme_table_fixtures(readme)
+def check_scope_table(profile: dict, scope: str) -> list[str]:
+    named = scope_table_fixtures(scope)
     if named is None:
-        return [f'README.md: no table after "{README_TABLE_MARKER}"']
+        return [f'docs/scope.md: no table after "{SCOPE_TABLE_MARKER}"']
     fixtures = {req["fixture"] for req in profile["requirements"]}
     rows = Counter(named)
-    problems = [f"README.md table has no row for {f}" for f in sorted(fixtures - set(rows))]
-    problems += [f"README.md table names {f}, which is not in fixtures/" for f in sorted(set(rows) - fixtures)]
-    problems += [f"README.md table names {f} in {n} rows" for f, n in sorted(rows.items()) if n > 1]
+    problems = [f"docs/scope.md table has no row for {f}" for f in sorted(fixtures - set(rows))]
+    problems += [f"docs/scope.md table names {f}, which is not in fixtures/" for f in sorted(set(rows) - fixtures)]
+    problems += [f"docs/scope.md table names {f} in {n} rows" for f, n in sorted(rows.items()) if n > 1]
     return problems
 
 
@@ -507,13 +508,13 @@ def check_profile_file(rendered: str) -> str | None:
 def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="conformance_profile.py",
-        description="Write conformance.json from the fixtures, or with --check verify it and the README.",
+        description="Write conformance.json from the fixtures, or with --check verify it, docs/scope.md and the README.",
         allow_abbrev=False,
     )
     parser.add_argument(
         "--check",
         action="store_true",
-        help="write nothing; exit 1 if conformance.json, the README table or a root file is stale",
+        help="write nothing; exit 1 if conformance.json, the docs/scope.md table or a root file is stale",
     )
     return parser.parse_args(argv)
 
@@ -535,13 +536,18 @@ def main(argv: list[str] | None = None) -> int:
         except ReadError as exc:
             print(f"README.md: {exc}")
             return 1
-        problems = check_readme_table(profile, readme)
+        try:
+            scope = read_utf8(SCOPE)
+        except ReadError as exc:
+            print(f"docs/scope.md: {exc}")
+            return 1
+        problems = check_scope_table(profile, scope)
         for problem in problems:
             print(problem)
         if problems:
             rc = 1
         else:
-            print(f"README.md table names all {len(profile['requirements'])} fixtures")
+            print(f"docs/scope.md table names all {len(profile['requirements'])} fixtures")
         root_problems = check_root_files(readme)
         for problem in root_problems:
             print(problem)
