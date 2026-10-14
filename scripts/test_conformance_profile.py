@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tests for scripts/conformance_profile.py --check.
 
-`--check` must hold the README's "What this suite verifies" table to exactly
+`--check` must hold the "What this suite verifies" table in docs/scope.md to exactly
 one row per fixture: a missing row, a row for a fixture that does not exist,
 and a fixture named in more than one row are each reported, indented rows
 included. A file the script cannot read or decode, and a conformance.json it cannot
@@ -10,7 +10,7 @@ write, is a one-line problem, not a traceback, and an argument other than
 under a locale whose encoding is not UTF-8.
 
 The CheckReadmeTest tests run the script from a temporary copy of the files it
-reads, so the repository's own README.md and conformance.json are never touched,
+reads, so the repository's own README.md, docs/scope.md and conformance.json are never touched,
 and with Python's default integer digit limit, so a PYTHONINTMAXSTRDIGITS in the
 caller's environment does not change what the script reports.
 
@@ -41,8 +41,8 @@ ROW_A = "| Item A | `fixtures/a.json` |"
 ROW_B = "| Item B | `fixtures/b.json` |"
 
 
-def readme(*rows: str) -> str:
-    lines = ["# Suite", "", cp.README_TABLE_MARKER, "", "| Item | Covered by |", "|---|---|", *rows, "", "Trailing text."]
+def scope(*rows: str) -> str:
+    lines = ["# Suite", "", cp.SCOPE_TABLE_MARKER, "", "| Item | Covered by |", "|---|---|", *rows, "", "Trailing text."]
     return "\n".join(lines) + "\n"
 
 
@@ -50,82 +50,82 @@ def duplicate_first_fixture_row(text: str) -> tuple[str, str]:
     """Copy the first fixture row of the table so it appears twice."""
     lines = text.splitlines(keepends=True)
     for i, line in enumerate(lines):
-        refs = cp.README_FIXTURE_REF.findall(line)
+        refs = cp.SCOPE_FIXTURE_REF.findall(line)
         if line.startswith("|") and refs:
             return "".join(lines[: i + 1] + [line] + lines[i + 1 :]), refs[0]
     raise AssertionError("no fixture row found")
 
 
-class ReadmeTableCheck(unittest.TestCase):
+class ScopeTableCheck(unittest.TestCase):
     @contextlib.contextmanager
-    def readme_text(self, text: str):
+    def scope_text(self, text: str):
         with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "README.md"
+            path = Path(tmp) / "scope.md"
             path.write_text(text)
-            with mock.patch.object(cp, "README", path):
+            with mock.patch.object(cp, "SCOPE", path):
                 yield
 
     def problems(self, text: str) -> list[str]:
-        return cp.check_readme_table(PROFILE, text)
+        return cp.check_scope_table(PROFILE, text)
 
     def test_one_row_per_fixture_passes(self):
-        self.assertEqual(self.problems(readme(ROW_A, ROW_B)), [])
+        self.assertEqual(self.problems(scope(ROW_A, ROW_B)), [])
 
     def test_missing_row_is_reported(self):
-        self.assertEqual(self.problems(readme(ROW_A)), ["README.md table has no row for fixtures/b.json"])
+        self.assertEqual(self.problems(scope(ROW_A)), ["docs/scope.md table has no row for fixtures/b.json"])
 
     def test_unknown_fixture_is_reported(self):
         self.assertEqual(
-            self.problems(readme(ROW_A, ROW_B, "| Item C | `fixtures/c.json` |")),
-            ["README.md table names fixtures/c.json, which is not in fixtures/"],
+            self.problems(scope(ROW_A, ROW_B, "| Item C | `fixtures/c.json` |")),
+            ["docs/scope.md table names fixtures/c.json, which is not in fixtures/"],
         )
 
     def test_duplicated_row_is_reported(self):
         self.assertEqual(
-            self.problems(readme(ROW_A, ROW_B, ROW_A)),
-            ["README.md table names fixtures/a.json in 2 rows"],
+            self.problems(scope(ROW_A, ROW_B, ROW_A)),
+            ["docs/scope.md table names fixtures/a.json in 2 rows"],
         )
 
     def test_each_duplicated_fixture_is_reported_with_its_row_count(self):
         self.assertEqual(
-            self.problems(readme(ROW_B, ROW_A, ROW_B, ROW_A, ROW_B)),
+            self.problems(scope(ROW_B, ROW_A, ROW_B, ROW_A, ROW_B)),
             [
-                "README.md table names fixtures/a.json in 2 rows",
-                "README.md table names fixtures/b.json in 3 rows",
+                "docs/scope.md table names fixtures/a.json in 2 rows",
+                "docs/scope.md table names fixtures/b.json in 3 rows",
             ],
         )
 
     def test_indented_row_does_not_end_the_table(self):
-        self.assertEqual(self.problems(readme(ROW_A, "   " + ROW_B)), [])
+        self.assertEqual(self.problems(scope(ROW_A, "   " + ROW_B)), [])
 
     def test_indented_duplicated_row_is_reported(self):
         self.assertEqual(
-            self.problems(readme(ROW_A, ROW_B, "   " + ROW_A)),
-            ["README.md table names fixtures/a.json in 2 rows"],
+            self.problems(scope(ROW_A, ROW_B, "   " + ROW_A)),
+            ["docs/scope.md table names fixtures/a.json in 2 rows"],
         )
 
     def test_indented_unknown_fixture_is_reported(self):
         self.assertEqual(
-            self.problems(readme(ROW_A, ROW_B, "\t| Item C | `fixtures/c.json` |")),
-            ["README.md table names fixtures/c.json, which is not in fixtures/"],
+            self.problems(scope(ROW_A, ROW_B, "\t| Item C | `fixtures/c.json` |")),
+            ["docs/scope.md table names fixtures/c.json, which is not in fixtures/"],
         )
 
     def test_fixture_named_twice_in_one_row_is_one_row(self):
         row = "| Item A, see `fixtures/a.json` | `fixtures/a.json` |"
-        self.assertEqual(self.problems(readme(row, ROW_B)), [])
+        self.assertEqual(self.problems(scope(row, ROW_B)), [])
 
-    def test_committed_readme_passes(self):
-        self.assertEqual(cp.check_readme_table(cp.build(), cp.README.read_text()), [])
+    def test_committed_scope_passes(self):
+        self.assertEqual(cp.check_scope_table(cp.build(), cp.SCOPE.read_text()), [])
 
-    def test_check_exits_1_on_committed_readme_with_a_duplicated_row(self):
-        text, fixture = duplicate_first_fixture_row(cp.README.read_text())
+    def test_check_exits_1_on_committed_scope_with_a_duplicated_row(self):
+        text, fixture = duplicate_first_fixture_row(cp.SCOPE.read_text())
         out = io.StringIO()
-        with self.readme_text(text), mock.patch.object(sys, "argv", ["conformance_profile.py", "--check"]):
+        with self.scope_text(text), mock.patch.object(sys, "argv", ["conformance_profile.py", "--check"]):
             with contextlib.redirect_stdout(out):
                 rc = cp.main()
         self.assertEqual(rc, 1)
-        self.assertIn(f"README.md table names {fixture} in 2 rows", out.getvalue().splitlines())
-        self.assertNotIn("README.md table names all", out.getvalue())
+        self.assertIn(f"docs/scope.md table names {fixture} in 2 rows", out.getvalue().splitlines())
+        self.assertNotIn("docs/scope.md table names all", out.getvalue())
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -149,6 +149,8 @@ class CheckReadmeTest(unittest.TestCase):
         shutil.copytree(REPO_ROOT / "fixtures", self.root / "fixtures")
         shutil.copy2(REPO_ROOT / "conformance.json", self.root)
         shutil.copy2(REPO_ROOT / "README.md", self.root)
+        (self.root / "docs").mkdir()
+        shutil.copy2(REPO_ROOT / "docs" / "scope.md", self.root / "docs")
 
     def script_env(self, **overrides: str) -> dict[str, str]:
         return dict(os.environ, PYTHONINTMAXSTRDIGITS=INT_MAX_STR_DIGITS, **overrides)
@@ -226,6 +228,13 @@ class CheckReadmeTest(unittest.TestCase):
             self.check(), ["conformance.json is current", "README.md: cannot be read (not valid UTF-8)"]
         )
 
+    def test_missing_scope_is_a_one_line_problem(self) -> None:
+        (self.root / "docs" / "scope.md").unlink()
+        self.assert_problems(
+            self.check(),
+            ["conformance.json is current", "docs/scope.md: cannot be read (No such file or directory)"],
+        )
+
     def test_unreadable_conformance_json_is_a_one_line_problem(self) -> None:
         (self.root / "conformance.json").unlink()
         (self.root / "conformance.json").mkdir()
@@ -234,7 +243,7 @@ class CheckReadmeTest(unittest.TestCase):
             self.check(),
             [
                 "conformance.json: cannot be read (Is a directory)",
-                f"README.md table names all {fixtures} fixtures",
+                f"docs/scope.md table names all {fixtures} fixtures",
                 "README.md names every root file",
             ],
         )

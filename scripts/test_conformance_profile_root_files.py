@@ -98,6 +98,8 @@ def copy_repo(root: Path) -> None:
     shutil.copytree(REPO_ROOT / "fixtures", root / "fixtures")
     shutil.copy2(REPO_ROOT / "conformance.json", root)
     shutil.copy2(REPO_ROOT / "README.md", root)
+    (root / "docs").mkdir()
+    shutil.copy2(REPO_ROOT / "docs" / "scope.md", root / "docs")
     shutil.copy2(REPO_ROOT / ".gitignore", root)
 
 
@@ -208,7 +210,7 @@ class RootFileRuleTest(unittest.TestCase):
     @unittest.skipUnless(HAS_GIT, "git is not installed")
     def test_checkout_skips_tracked_files_below_the_root(self) -> None:
         self.track()
-        (self.root / "docs").mkdir()
+        (self.root / "docs").mkdir(exist_ok=True)
         (self.root / "docs" / "NOTES.md").write_text("notes\n")
         git(self.root, "add", "--", "docs/NOTES.md")
         self.assert_passes()
@@ -247,10 +249,10 @@ class RootFileRuleTest(unittest.TestCase):
         with mock.patch.dict(os.environ, {name: "x" for name in names}):
             self.assertFalse(set(names) & set(cp.git_env()))
 
-    def test_readme_lists_the_exempt_files(self) -> None:
-        text = (REPO_ROOT / "README.md").read_text()
+    def test_ci_page_lists_the_exempt_files(self) -> None:
+        text = (REPO_ROOT / "docs" / "continuous-verification.md").read_text()
         exempt = re.search(r"read by convention\s*\(([^)]*)\)", text)
-        self.assertIsNotNone(exempt, "README.md does not list the exempt root files")
+        self.assertIsNotNone(exempt, "docs/continuous-verification.md does not list the exempt root files")
         self.assertEqual(set(re.findall(r"`([^`]+)`", exempt.group(1))), cp.ROOT_CONVENTION_FILES)
 
 
