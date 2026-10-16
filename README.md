@@ -3,8 +3,10 @@
 Conformance fixtures and reference verifiers for the
 [Agent Authorization Protocol (AAP)](https://github.com/opena2a-standards/agent-authorization-protocol)
 token canonical form (AAP-SPEC §9: JWTs over JWS, where serialization is
-canonicalization). The AAP version the suite covers is the `spec.version`
-field of [`conformance.json`](./conformance.json).
+canonicalization).
+
+The AAP version the suite covers is the `spec.version` field of
+[`conformance.json`](./conformance.json).
 
 Two SDK-independent reference verifiers (Node and Python) walk the fixture
 set and report PASS or FAIL per vector. Fixture bytes are pinned in
@@ -31,14 +33,6 @@ PASS  fixtures/ait-compact-valid.json  [ait]
 
 summary: 44 pass, 0 fail (44 fixtures)
 ```
-
-The verifier pair is Node + Python deliberately (the
-[a2a-idf-conformance](https://github.com/opena2a-standards/a2a-idf-conformance)
-precedent, not the Go pair of atp-conformance): the AAP reference broker
-([Secretless](https://github.com/opena2a-org/secretless-ai), `src/broker/cpi/assertion.ts`)
-is TypeScript, so the Node verifier exercises the same `node:crypto` JOSE
-primitives the reference mints with, and the Python verifier mirrors the
-spec repo's fixture generator from the verification side.
 
 This suite is the fifth in the family, alongside
 [atx-conformance](https://github.com/opena2a-standards/atx-conformance),
@@ -79,6 +73,8 @@ conforming verifier must match.
   verifier reads.
 - [Continuous verification](docs/continuous-verification.md): the CI gates
   that enforce these claims on pushes to `main` and on pull requests.
+- [How it works](docs/how-it-works.md): why the reference verifiers are a
+  Node and Python pair.
 - [`conformance.json`](./conformance.json): the machine-readable
   requirement-to-fixture mapping.
 - [`COSIGNERS.md`](./COSIGNERS.md): how second parties cosign
