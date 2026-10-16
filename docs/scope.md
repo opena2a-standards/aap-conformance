@@ -3,6 +3,13 @@
 What the suite verifies, fixture by fixture, what it does not verify, and
 where the fixture bytes come from. Back to the [README](../README.md).
 
+Each fixture is a byte-stable JSON file that bundles a pinned AAP token
+(AIT, CGT, DA, or BAC; compact or JWS General JSON Serialization) with
+verifier configuration (a fixed clock, trusted keys, and where the fixture
+needs them a path suite policy, the delegator's token, and the presenter's
+proof) and an expected outcome (ACCEPT or REJECT with a pinned reject
+category).
+
 ## Fixture provenance: reuse, not re-derivation
 
 The ACCEPT fixtures embed the spec repo's published token bytes UNCHANGED —

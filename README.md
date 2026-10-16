@@ -1,29 +1,35 @@
 # aap-conformance
 
 Conformance fixtures and reference verifiers for the
-[Agent Authorization Protocol (AAP) 0.5.0-draft](https://github.com/opena2a-standards/agent-authorization-protocol)
-token canonical form (AAP-SPEC §9: JWTs over JWS — serialization IS
-canonicalization).
+[Agent Authorization Protocol (AAP)](https://github.com/opena2a-standards/agent-authorization-protocol)
+token canonical form (AAP-SPEC §9: JWTs over JWS, where serialization is
+canonicalization). The AAP version the suite covers is the `spec.version`
+field of [`conformance.json`](./conformance.json).
 
-Each fixture is a byte-stable JSON file that bundles a pinned AAP token
-(AIT, CGT, DA, or BAC; compact or JWS General JSON Serialization) with
-verifier configuration (a fixed clock, trusted keys, and where the fixture
-needs them a path suite policy, the delegator's token, and the presenter's
-proof) and an expected outcome (ACCEPT or REJECT with a pinned reject
-category). Two SDK-independent reference verifiers (Node and Python) walk
-the fixture set and report PASS or FAIL per vector. Fixture bytes are pinned
-in [`MANIFEST.sha256`](./MANIFEST.sha256).
+Two SDK-independent reference verifiers (Node and Python) walk the fixture
+set and report PASS or FAIL per vector. Fixture bytes are pinned in
+[`MANIFEST.sha256`](./MANIFEST.sha256).
 
 Run it:
 
 ```bash
 npm install   # @noble/post-quantum, for the ML-DSA-65 fixtures (RFC 9964)
 node verifiers/node/verify.mjs fixtures
-# summary: 44 pass, 0 fail (44 fixtures)
 
 pip install -r verifiers/python/requirements.txt
 python3 verifiers/python/verify.py fixtures
-# summary: 44 pass, 0 fail (44 fixtures)
+```
+
+A passing run prints an entry per fixture, then a summary line (first entry
+shown; the two verifiers print the same lines):
+
+```text
+PASS  fixtures/ait-compact-valid.json  [ait]
+       expected: ACCEPT
+       observed: ACCEPT
+...
+
+summary: 44 pass, 0 fail (44 fixtures)
 ```
 
 The verifier pair is Node + Python deliberately (the
@@ -66,8 +72,9 @@ conforming verifier must match.
 
 ## Documentation
 
-- [Scope and fixture provenance](docs/scope.md): the requirement-to-fixture
-  table, the reject categories, and what the suite does not verify.
+- [Scope and fixture provenance](docs/scope.md): what a fixture holds, the
+  requirement-to-fixture table, the reject categories, and what the suite
+  does not verify.
 - [Using the fixtures](docs/using-the-fixtures.md): the fixture fields a
   verifier reads.
 - [Continuous verification](docs/continuous-verification.md): the CI gates
