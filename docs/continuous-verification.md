@@ -40,3 +40,23 @@ runs these gates on each push to `main` and on each pull request:
 7. On every push to `main`, CI keyless-signs `MANIFEST.sha256` with Sigstore
    cosign (Rekor is the durable record) — see
    [`COSIGNERS.md`](../COSIGNERS.md) for how second parties cosign.
+
+## Local-only unit tests
+
+The unit tests in `scripts/test_*.py` are local-only: no step of
+[`conformance.yml`](../.github/workflows/conformance.yml) or
+[`spec-drift.yml`](../.github/workflows/spec-drift.yml) runs them, so a
+failing unit test does not block a merge. Run them before opening a pull
+request:
+
+```bash
+python3 -m unittest discover -s scripts -p 'test_*.py'
+```
+
+They cover the scope-table rule, the README summary-line rule, the root-file
+rule and the error reporting of `scripts/conformance_profile.py`, the
+README's run commands, passing-run capture and spec-version pointer
+(`scripts/test_readme_run_capture.py`), and this page's account of how they
+run. Gate 6 checks the capture's summary line in CI as well; the README's run
+commands, the capture's first entry and the spec-version pointer are checked
+only by these tests.
