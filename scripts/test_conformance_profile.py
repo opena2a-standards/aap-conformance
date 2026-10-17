@@ -128,6 +128,45 @@ class ScopeTableCheck(unittest.TestCase):
         self.assertNotIn("docs/scope.md table names all", out.getvalue())
 
 
+class ReadmeSummaryCheck(unittest.TestCase):
+    def problems(self, readme: str) -> list[str]:
+        return cp.check_readme_summary(PROFILE, readme)
+
+    def test_summary_counting_every_fixture_passes(self):
+        self.assertEqual(self.problems("```text\nsummary: 2 pass, 0 fail (2 fixtures)\n```\n"), [])
+
+    def test_indented_summary_counting_every_fixture_passes(self):
+        self.assertEqual(self.problems("    summary: 2 pass, 0 fail (2 fixtures)\n"), [])
+
+    def test_stale_count_is_reported(self):
+        self.assertEqual(
+            self.problems("summary: 1 pass, 0 fail (1 fixtures)\n"),
+            ['README.md shows "summary: 1 pass, 0 fail (1 fixtures)", but a passing run prints "summary: 2 pass, 0 fail (2 fixtures)"'],
+        )
+
+    def test_failing_run_is_reported(self):
+        self.assertEqual(
+            self.problems("summary: 1 pass, 1 fail (2 fixtures)\n"),
+            ['README.md shows "summary: 1 pass, 1 fail (2 fixtures)", but a passing run prints "summary: 2 pass, 0 fail (2 fixtures)"'],
+        )
+
+    def test_each_stale_summary_is_reported(self):
+        readme = "summary: 2 pass, 0 fail (2 fixtures)\nsummary: 3 pass, 0 fail (3 fixtures)\n"
+        self.assertEqual(
+            self.problems(readme),
+            ['README.md shows "summary: 3 pass, 0 fail (3 fixtures)", but a passing run prints "summary: 2 pass, 0 fail (2 fixtures)"'],
+        )
+
+    def test_missing_summary_is_reported(self):
+        self.assertEqual(
+            self.problems("No capture here.\n"),
+            ['README.md shows no verifier summary line; a passing run prints "summary: 2 pass, 0 fail (2 fixtures)"'],
+        )
+
+    def test_committed_readme_passes(self):
+        self.assertEqual(cp.check_readme_summary(cp.build(), cp.README.read_text(encoding="utf-8")), [])
+
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 # A locale whose encoding is not UTF-8. Where it is not installed, an LC_ALL
 # naming it leaves Python in the C locale, whose ASCII encoding is not UTF-8
@@ -228,6 +267,31 @@ class CheckReadmeTest(unittest.TestCase):
             self.check(), ["conformance.json is current", "README.md: cannot be read (not valid UTF-8)"]
         )
 
+    def test_readme_summary_with_a_stale_count_fails_the_check(self) -> None:
+        fixtures = len(list((self.root / "fixtures").glob("*.json")))
+        current = f"summary: {fixtures} pass, 0 fail ({fixtures} fixtures)"
+        stale = f"summary: {fixtures - 1} pass, 0 fail ({fixtures - 1} fixtures)"
+        path = self.root / "README.md"
+        text = path.read_text(encoding="utf-8")
+        self.assertIn(current, text.splitlines())
+        path.write_text(text.replace(current, stale), encoding="utf-8")
+        result = self.check()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn(f'README.md shows "{stale}", but a passing run prints "{current}"', result.stdout.splitlines())
+        self.assertNotIn("README.md summary line counts all", result.stdout)
+
+    def test_readme_without_a_summary_line_fails_the_check(self) -> None:
+        fixtures = len(list((self.root / "fixtures").glob("*.json")))
+        current = f"summary: {fixtures} pass, 0 fail ({fixtures} fixtures)"
+        path = self.root / "README.md"
+        text = path.read_text(encoding="utf-8")
+        path.write_text(text.replace(current, ""), encoding="utf-8")
+        result = self.check()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn(
+            f'README.md shows no verifier summary line; a passing run prints "{current}"', result.stdout.splitlines()
+        )
+
     def test_missing_scope_is_a_one_line_problem(self) -> None:
         (self.root / "docs" / "scope.md").unlink()
         self.assert_problems(
@@ -244,6 +308,7 @@ class CheckReadmeTest(unittest.TestCase):
             [
                 "conformance.json: cannot be read (Is a directory)",
                 f"docs/scope.md table names all {fixtures} fixtures",
+                f"README.md summary line counts all {fixtures} fixtures",
                 "README.md names every root file",
             ],
         )

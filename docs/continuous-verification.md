@@ -5,11 +5,12 @@ The CI gates behind the suite's claims. Back to the [README](../README.md).
 ## Continuous verification
 
 [`.github/workflows/conformance.yml`](../.github/workflows/conformance.yml)
-enforces every claim in the [README](../README.md) and the
-[scope page](scope.md) on each push and pull request:
+runs these gates on each push to `main` and on each pull request:
 
 1. Both reference verifiers run against `fixtures/` and must report
-   `44 pass, 0 fail`.
+   `0 fail`: each exits non-zero when any fixture fails and 0 otherwise.
+   They do not check how many fixtures there are; the
+   fixture count the README shows is checked by gate 6.
 2. Schema validation
    ([`scripts/schema_validation.py`](../scripts/schema_validation.py)): every
    fixture's decoded header/claims/container must match its DECLARED schema
@@ -29,7 +30,9 @@ enforces every claim in the [README](../README.md) and the
    reject category, and publishes `parity-report.json` as a CI artifact.
 6. `conformance.json` must match the fixture set, the Scope table in
    [`docs/scope.md`](scope.md) must have exactly one row for every fixture,
-   and every tracked file at the repository root must be named in the
+   the summary line of the README's sample run must be the one a passing run
+   over `fixtures/` prints (`summary: N pass, 0 fail (N fixtures)`, N the
+   number of fixtures), and every tracked file at the repository root must be named in the
    README, backticked or as a
    link target, except the ones git and npm read by convention
    (`.gitignore`, `LICENSE`, `README.md`, `package.json`,
