@@ -20,5 +20,5 @@ grant rejects `DELEGATOR_INVALID`, since checking it would re-check nothing;
 and `presentation.proof` carries the presenter's signed-challenge proof
 (`binding`, `challenge`, `jwk`, `signature`) for a token with `cnf`, which
 rejects `CNF_MISMATCH` when the proof is absent or does not bind. A
-conforming verifier matches the expected verdict on all 44 fixtures — and
+conforming verifier matches the expected verdict on every fixture in `fixtures/` — and
 rejects for the pinned reason, not just any reason.

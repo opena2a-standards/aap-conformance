@@ -9,7 +9,10 @@ set: regeneration is deterministic and CI verifies the committed file matches.
 
 `--check` also verifies the human-readable counterpart: the "What this suite
 verifies" table in `docs/scope.md` must have exactly one row for every fixture
-in `fixtures/` and name no fixture that does not exist. It also requires every
+in `fixtures/` and name no fixture that does not exist. The README's sample
+run must end in the summary line a passing run over `fixtures/` prints
+(`summary: N pass, 0 fail (N fixtures)`, N the number of fixtures), since the
+verifiers themselves exit 0 whatever the fixture count. It also requires every
 tracked file at the repository root to be named in the README, as a backticked
 name or a link target, except the files git and npm read by convention, so no
 root file is left unexplained. Where git cannot list the tracked files (a
@@ -22,7 +25,7 @@ a one-line problem naming it, with exit 1.
 
 Usage:
     python3 scripts/conformance_profile.py            # (re)write conformance.json
-    python3 scripts/conformance_profile.py --check    # exit 1 if conformance.json, the docs/scope.md table or a root file is stale
+    python3 scripts/conformance_profile.py --check    # exit 1 if conformance.json, the docs/scope.md table, the README summary line or a root file is stale
     python3 scripts/conformance_profile.py --help     # print usage; any other argument is an error and writes nothing
 """
 from __future__ import annotations
@@ -42,6 +45,8 @@ README = REPO_ROOT / "README.md"
 SCOPE = REPO_ROOT / "docs" / "scope.md"
 SCOPE_TABLE_MARKER = "What this suite verifies:"
 SCOPE_FIXTURE_REF = re.compile(r"`(fixtures/[A-Za-z0-9._-]+\.json)`")
+# A verifier summary line, as both verifiers print it, anywhere in the README.
+README_SUMMARY = re.compile(r"^[ \t]*(summary: [0-9]+ pass, [0-9]+ fail \([0-9]+ fixtures\))[ \t]*$", re.MULTILINE)
 # Root files that git or npm read by convention; every other tracked root file
 # must be named in the README.
 ROOT_CONVENTION_FILES = {".gitignore", "LICENSE", "README.md", "package.json", "package-lock.json"}
@@ -263,6 +268,20 @@ def check_scope_table(profile: dict, scope: str) -> list[str]:
     problems += [f"docs/scope.md table names {f}, which is not in fixtures/" for f in sorted(set(rows) - fixtures)]
     problems += [f"docs/scope.md table names {f} in {n} rows" for f, n in sorted(rows.items()) if n > 1]
     return problems
+
+
+def readme_summary_line(profile: dict) -> str:
+    """The summary line a passing verifier run over the profile's fixtures prints."""
+    n = len(profile["requirements"])
+    return f"summary: {n} pass, 0 fail ({n} fixtures)"
+
+
+def check_readme_summary(profile: dict, readme: str) -> list[str]:
+    expected = readme_summary_line(profile)
+    shown = README_SUMMARY.findall(readme)
+    if not shown:
+        return [f'README.md shows no verifier summary line; a passing run prints "{expected}"']
+    return [f'README.md shows "{line}", but a passing run prints "{expected}"' for line in shown if line != expected]
 
 
 def git_env() -> dict[str, str]:
@@ -514,7 +533,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--check",
         action="store_true",
-        help="write nothing; exit 1 if conformance.json, the docs/scope.md table or a root file is stale",
+        help="write nothing; exit 1 if conformance.json, the docs/scope.md table, the README summary line or a root file is stale",
     )
     return parser.parse_args(argv)
 
@@ -548,6 +567,13 @@ def main(argv: list[str] | None = None) -> int:
             rc = 1
         else:
             print(f"docs/scope.md table names all {len(profile['requirements'])} fixtures")
+        summary_problems = check_readme_summary(profile, readme)
+        for problem in summary_problems:
+            print(problem)
+        if summary_problems:
+            rc = 1
+        else:
+            print(f"README.md summary line counts all {len(profile['requirements'])} fixtures")
         root_problems = check_root_files(readme)
         for problem in root_problems:
             print(problem)
