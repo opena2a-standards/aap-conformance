@@ -65,7 +65,7 @@ What this suite verifies:
 | AAP §9.4 must-reject: hybrid token whose Ed25519 entry verifies and whose ML-DSA-65 signature is corrupted (the classical half alone does not carry the token) | `fixtures/cgt-hybrid-mldsa-bad-signature.json` |
 | AAP §9.4/§8.2 must-reject: general-form token carrying only an ML-DSA-65 entry (declaring ML-DSA-65 puts it on the hybrid profile, which requires an Ed25519 entry too) | `fixtures/cgt-hybrid-missing-ed25519.json` |
 | AAP §9.4/§8.2 must-reject: hybrid token with its declared ML-DSA-65 entry stripped, on a path whose policy requires both families | `fixtures/cgt-hybrid-missing-mldsa65.json` |
-| AAP §5.3/§5.4 must-reject: DA whose `exp` is later than its delegator's (the §5.3 bound, so a delegation does not outlive the grant it was delegated from; a DA carries less than the delegator's grant, §5.4; `iat`/`exp` are the validity window, §4.2) | `fixtures/da-compact-outlives-delegator.json` |
+| AAP §5.4 must-reject: DA whose `exp` is later than its delegator's (a DA carries less than the delegator's grant, §5.4; `iat`/`exp` are the validity window, §4.2; the §5.3 sentence that bounds a DA's `exp` by its delegator's is not in 0.5.0-draft and is pending a spec release) | `fixtures/da-compact-outlives-delegator.json` |
 | AAP §5.3/§5.4 must-reject: supplied delegator token is not the DA's delegator (`sub` is not the DA's `act.sub`) | `fixtures/da-compact-delegator-mismatch.json` |
 | AAP §4.5 must-reject: `aap_crit` names a claim the token does not carry | `fixtures/cgt-compact-crit-names-absent-claim.json` |
 | AAP §4.5 must-reject: `aap_crit` present but empty (schema `minItems` 1) | `fixtures/cgt-compact-crit-empty.json` |
