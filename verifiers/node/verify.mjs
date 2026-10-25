@@ -55,8 +55,11 @@
 //     RFC 7519 §4 permits; JSON.parse and Python json.loads agree natively
 //
 // Usage:  node verify.mjs <fixture.json | directory> [...]
-// Exit code: 0 if every fixture's expected verdict (and reject category,
-// when pinned) is met, else 1.
+// Exit code: 0 if every fixture carries an expected verdict of ACCEPT or
+// REJECT in `expected.verifyResult` and that verdict (and the reject category
+// and reason substring, when pinned) is met, else 1. A fixture without such a
+// verdict is reported FAIL with the reason on its status line; a file whose
+// JSON value is not an object is reported as a load error.
 
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { join } from "node:path";
@@ -1051,6 +1054,10 @@ function expandPaths(args) {
   return [...out].sort();
 }
 
+// A fixture is judged only against an expected verdict of ACCEPT or REJECT.
+const NOT_A_JSON_OBJECT = "(load error: not a JSON object)";
+const NO_EXPECTED_VERDICT = "(no expected verdict: expected.verifyResult must be ACCEPT or REJECT)";
+
 function main(argv) {
   if (argv.length < 1) {
     process.stderr.write("usage: verify.mjs <fixture.json|dir>...\n");
@@ -1079,12 +1086,20 @@ function main(argv) {
       totalFail++;
       continue;
     }
+    if (!isPlainObject(fixture)) {
+      console.log(`FAIL  ${p}  ${NOT_A_JSON_OBJECT}`);
+      totalFail++;
+      continue;
+    }
 
     const got = verifyFixture(fixture);
-    const expected = fixture.expected ?? {};
-    const wantAccept = (expected.verifyResult ?? "").toUpperCase() === "ACCEPT";
+    const expected = isPlainObject(fixture.expected) ? fixture.expected : {};
+    const verifyResult = typeof expected.verifyResult === "string" ? expected.verifyResult : "";
+    const verdict = verifyResult.toUpperCase();
+    const hasVerdict = verdict === "ACCEPT" || verdict === "REJECT";
+    const wantAccept = verdict === "ACCEPT";
 
-    let ok = wantAccept === got.accepted;
+    let ok = hasVerdict && wantAccept === got.accepted;
     if (ok && !wantAccept && expected.rejectCategory) {
       ok = got.category === expected.rejectCategory;
     }
@@ -1097,8 +1112,9 @@ function main(argv) {
     else totalFail++;
 
     const observed = got.accepted ? "ACCEPT" : `REJECT[${got.category}: ${got.reason}]`;
-    console.log(`${status}  ${p}  [${fixture.fixtureType ?? "?"}]`);
-    process.stdout.write(`       expected: ${expected.verifyResult ?? ""}`);
+    const reason = hasVerdict ? "" : `  ${NO_EXPECTED_VERDICT}`;
+    console.log(`${status}  ${p}  [${fixture.fixtureType ?? "?"}]${reason}`);
+    process.stdout.write(`       expected: ${verifyResult}`);
     if (expected.rejectCategory) process.stdout.write(` [${expected.rejectCategory}]`);
     process.stdout.write("\n");
     console.log(`       observed: ${observed}`);

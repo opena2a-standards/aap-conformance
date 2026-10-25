@@ -40,6 +40,7 @@ runs these gates on each push to `main` and on each pull request:
 7. On every push to `main`, CI keyless-signs `MANIFEST.sha256` with Sigstore
    cosign (Rekor is the durable record) — see
    [`COSIGNERS.md`](../COSIGNERS.md) for how second parties cosign.
+8. The judging contract check runs both verifiers on inputs built from two fixtures, with the expected verdict removed, misspelled or of the wrong type, and on files whose JSON value is not an object. It asserts that each is reported FAIL, that the run exits 1, and that the two verifiers print the same report.
 
 ## Local-only unit tests
 
