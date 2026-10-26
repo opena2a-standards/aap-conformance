@@ -10,7 +10,9 @@ The fixtures are implementation-neutral: read a fixture, feed
 `token` (compact) or `tokenGeneral` (JWS General JSON Serialization) to your
 verifier configured with `verifierState.keys` (Ed25519 OKP and ML-DSA-65
 AKP public JWKs) and `verifierState.clockNumericDate`, and compare your
-verdict with `expected`. Where present, `verifierState.requiredSuites` is
+verdict with `expected`.
+`expected.verifyResult` is `ACCEPT` or `REJECT`; the reference verifiers report a fixture without one as FAIL.
+Where present, `verifierState.requiredSuites` is
 the path's suite policy (§8.2) for a general-form token;
 `delegation.delegatorToken` carries the immediate delegator's token (a CGT,
 or a DA deeper in a chain) for the §5.2-§5.4 re-check — it is the delegator

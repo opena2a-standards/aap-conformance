@@ -55,8 +55,11 @@ Parsing rules (AAP-SPEC §9.2, and the atx-conformance duplicate-key lesson):
     RFC 7519 §4 permits; json.loads and JSON.parse agree natively
 
 Usage:  python3 verify.py <fixture.json | directory> [...]
-Exit code: 0 if every fixture's expected verdict (and reject category,
-when pinned) is met, else 1.
+Exit code: 0 if every fixture carries an expected verdict of ACCEPT or
+REJECT in `expected.verifyResult` and that verdict (and the reject category
+and reason substring, when pinned) is met, else 1. A fixture without such a
+verdict is reported FAIL with the reason on its status line; a file whose
+JSON value is not an object is reported as a load error.
 """
 
 from __future__ import annotations
@@ -1002,6 +1005,11 @@ def expand_paths(args: list[str]) -> list[Path]:
     return sorted(out)
 
 
+# A fixture is judged only against an expected verdict of ACCEPT or REJECT.
+NOT_A_JSON_OBJECT = "(load error: not a JSON object)"
+NO_EXPECTED_VERDICT = "(no expected verdict: expected.verifyResult must be ACCEPT or REJECT)"
+
+
 def main(argv: list[str]) -> int:
     if len(argv) < 2:
         sys.stderr.write("usage: verify.py <fixture.json|dir>...\n")
@@ -1023,12 +1031,23 @@ def main(argv: list[str]) -> int:
             print(f"FAIL  {p}  (load error: {exc})")
             total_fail += 1
             continue
+        if not _is_plain_object(fixture):
+            print(f"FAIL  {p}  {NOT_A_JSON_OBJECT}")
+            total_fail += 1
+            continue
 
         got = verify_fixture(fixture)
-        expected = fixture.get("expected", {})
-        want_accept = expected.get("verifyResult", "").upper() == "ACCEPT"
+        expected = fixture.get("expected")
+        if not _is_plain_object(expected):
+            expected = {}
+        verify_result = expected.get("verifyResult")
+        if not isinstance(verify_result, str):
+            verify_result = ""
+        verdict = verify_result.upper()
+        has_verdict = verdict in ("ACCEPT", "REJECT")
+        want_accept = verdict == "ACCEPT"
 
-        ok = want_accept == got.accepted
+        ok = has_verdict and want_accept == got.accepted
         if ok and not want_accept and expected.get("rejectCategory"):
             ok = got.category == expected["rejectCategory"]
         if ok and not want_accept and expected.get("reasonContains"):
@@ -1040,8 +1059,9 @@ def main(argv: list[str]) -> int:
         else:
             total_fail += 1
 
-        print(f"{status}  {p}  [{fixture.get('fixtureType', '?')}]")
-        print(f"       expected: {expected.get('verifyResult', '')}", end="")
+        reason = "" if has_verdict else f"  {NO_EXPECTED_VERDICT}"
+        print(f"{status}  {p}  [{fixture.get('fixtureType', '?')}]{reason}")
+        print(f"       expected: {verify_result}", end="")
         if expected.get("rejectCategory"):
             print(f" [{expected['rejectCategory']}]")
         else:
