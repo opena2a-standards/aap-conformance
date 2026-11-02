@@ -14,6 +14,13 @@ check that:
     fixture's expected verdict and reject category;
   - verifyPresentation judges a repeated jti against the Map the caller passes
     in (AAP-SPEC §8.1), while verifyFixture starts a new one on each call;
+  - verifyFixture throws a RangeError ("presentations must be at least 1")
+    instead of returning when `presentations` is an integer below 1, keeps the
+    default of 1 for a value that is not an integer, and verifyPresentation
+    does not read `presentations`;
+  - the CLI reports a fixture whose `presentations` is an integer below 1 as
+    one FAIL line with the error, counts it as a fail, judges the fixtures
+    after it and exits 1;
   - the CLI still runs when it is started through a symbolic link.
 
 They need node on PATH and the Node dependency installed (`npm install`), and
@@ -44,14 +51,56 @@ DEPENDENCY = REPO_ROOT / "node_modules" / "@noble" / "post-quantum" / "package.j
 BLOCK = re.compile(r"^(PASS|FAIL)  (\S+)  \[")
 OBSERVED = re.compile(r"^       observed: (.*)$")
 
+# The error verifyFixture throws for an integer `presentations` below 1.
+BELOW_ONE_MESSAGE = "presentations must be at least 1"
+# One accepting and two rejecting fixtures, with the verdict each carries when
+# `presentations` is absent.
+VERDICT_FIXTURES = {
+    "cgt-compact-valid": (True, None),
+    "cgt-compact-bad-signature": (False, "BAD_SIGNATURE"),
+    "cgt-compact-expired": (False, "EXPIRED"),
+}
+# Integer `presentations` values below 1, by the name the consumer script
+# reads, with the value it reports having set.
+BELOW_ONE = {
+    "0": "0",
+    "-0": "-0",
+    "-1": "-1",
+    "Number.MIN_SAFE_INTEGER": "-9007199254740991",
+}
+
 # A script that imports the verifier as another program would. Its arguments
-# are the module URL, a mode, and the fixture paths the mode reads.
+# are the module URL, a mode, and the fixture paths the mode reads; the
+# `presentations` and `presentation-once` modes read one fixture path and then
+# the names of the `presentations` values to try.
 CONSUMER = r"""
 const [moduleUrl, mode, ...paths] = process.argv.slice(2);
 const verifier = await import(moduleUrl);
 const { readFileSync } = await import("node:fs");
 const load = (p) => JSON.parse(readFileSync(p, "utf8"));
-if (mode === "exports") {
+const named = new Map([["NaN", NaN], ["Number.MIN_SAFE_INTEGER", Number.MIN_SAFE_INTEGER]]);
+const shown = (input) =>
+  !Object.hasOwn(input, "presentations") ? "absent"
+  : Object.is(input.presentations, -0) ? "-0"
+  : Number.isNaN(input.presentations) ? "NaN"
+  : JSON.stringify(input.presentations);
+if (mode === "presentations" || mode === "presentation-once") {
+  const [path, ...names] = paths;
+  for (const name of names) {
+    const input = load(path);
+    if (name === "absent") delete input.presentations;
+    else input.presentations = named.has(name) ? named.get(name) : JSON.parse(name);
+    const value = shown(input);
+    try {
+      const result =
+        mode === "presentations" ? verifier.verifyFixture(input) : verifier.verifyPresentation(input, new Map());
+      console.log(JSON.stringify({ value, outcome: "returned", result: result ?? null }));
+    } catch (err) {
+      const error = { rangeError: err instanceof RangeError, name: String(err?.name), message: String(err?.message) };
+      console.log(JSON.stringify({ value, outcome: "threw", ...error }));
+    }
+  }
+} else if (mode === "exports") {
   const kinds = Object.fromEntries(Object.entries(verifier).map(([name, value]) => [name, typeof value]));
   console.log(JSON.stringify(kinds));
   console.log("after import");
@@ -81,6 +130,15 @@ def cli_observed(stdout: str) -> dict[str, str]:
             observed[current] = match.group(1)
             current = None
     return observed
+
+
+def write_copy(directory: Path, name: str, **fields: object) -> Path:
+    """A copy of fixtures/<name>.json in `directory`, with `fields` set on it."""
+    fixture = json.loads((FIXTURES / f"{name}.json").read_text(encoding="utf-8"))
+    fixture.update(fields)
+    target = directory / f"{name}.json"
+    target.write_text(json.dumps(fixture, indent=2) + "\n", encoding="utf-8")
+    return target
 
 
 @unittest.skipUnless(NODE, "node is not on PATH")
@@ -148,6 +206,80 @@ class NodeVerifierModuleTest(unittest.TestCase):
         self.assertEqual([r["accepted"] for r in runs["shared"]], [True, False])
         self.assertEqual(runs["shared"][1]["category"], "REPLAYED_JTI")
         self.assertEqual([r["accepted"] for r in runs["fresh"]], [True, True])
+
+    def presentation_runs(self, mode: str, name: str, *values: str) -> list[dict]:
+        """What `mode` gives on fixtures/<name>.json for each named `presentations` value."""
+        proc = self.consume(mode, FIXTURES / f"{name}.json", *values)
+        self.assertEqual(proc.returncode, 0, proc.stdout[-2000:] + proc.stderr[-2000:])
+        runs = [json.loads(line) for line in proc.stdout.splitlines()]
+        self.assertEqual(len(runs), len(values), proc.stdout[-2000:])
+        return runs
+
+    def test_verify_fixture_throws_for_an_integer_presentations_below_one(self) -> None:
+        for name, verdict in VERDICT_FIXTURES.items():
+            absent, *runs = self.presentation_runs("presentations", name, "absent", *BELOW_ONE)
+            self.assertEqual(absent["outcome"], "returned", absent)
+            self.assertEqual((absent["result"]["accepted"], absent["result"]["category"]), verdict)
+            self.assertEqual([run["value"] for run in runs], list(BELOW_ONE.values()))
+            for run in runs:
+                with self.subTest(fixture=name, presentations=run["value"]):
+                    self.assertEqual(run["outcome"], "threw", f"verifyFixture returned instead of throwing: {run}")
+                    self.assertEqual(
+                        (run["rangeError"], run["name"], run["message"]), (True, "RangeError", BELOW_ONE_MESSAGE)
+                    )
+
+    def test_verify_fixture_keeps_the_default_for_presentations_that_is_not_an_integer(self) -> None:
+        defaults = {"absent": "absent", "1": "1", "0.5": "0.5", '"0"': '"0"', "null": "null", "NaN": "NaN"}
+        runs = self.presentation_runs("presentations", "cgt-compact-valid", *defaults, "2")
+        self.assertEqual([run["value"] for run in runs], [*defaults.values(), "2"])
+        for run in runs:
+            self.assertEqual(run["outcome"], "returned", run)
+        for run in runs[:-1]:
+            with self.subTest(presentations=run["value"]):
+                self.assertEqual((run["result"]["accepted"], run["result"]["category"]), (True, None))
+        replayed = runs[-1]["result"]
+        self.assertEqual((replayed["accepted"], replayed["category"]), (False, "REPLAYED_JTI"))
+
+    def test_verify_presentation_does_not_read_presentations(self) -> None:
+        for name in VERDICT_FIXTURES:
+            absent, *runs = self.presentation_runs("presentation-once", name, "absent", "0", "-1")
+            self.assertEqual(absent["outcome"], "returned", absent)
+            for run in runs:
+                with self.subTest(fixture=name, presentations=run["value"]):
+                    self.assertEqual(run["outcome"], "returned", run)
+                    self.assertEqual(run["result"], absent["result"])
+
+    def test_cli_reports_a_presentations_below_one_fixture_as_one_fail_line(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            below_one = write_copy(Path(tmp), "cgt-compact-bad-signature", presentations=0)
+            proc = self.run_node(str(VERIFY), str(below_one))
+        report = f"exit {proc.returncode}\nstdout:\n{proc.stdout[-2000:]}\nstderr:\n{proc.stderr[-2000:]}"
+        lines = proc.stdout.splitlines()
+        self.assertEqual(
+            [line for line in lines if line.startswith("FAIL ")],
+            [f"FAIL  {below_one}  [cgt]  (verify error: {BELOW_ONE_MESSAGE})"],
+            report,
+        )
+        self.assertEqual([line for line in lines if line.startswith("PASS")], [], report)
+        self.assertEqual(lines[-1:], ["summary: 0 pass, 1 fail (1 fixtures)"], report)
+        self.assertEqual(proc.stderr, "", report)
+        self.assertEqual(proc.returncode, 1, report)
+
+    def test_cli_judges_the_fixtures_after_a_presentations_below_one_fixture(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            below_one = write_copy(Path(tmp), "cgt-compact-bad-signature", presentations=0)
+            valid = write_copy(Path(tmp), "cgt-compact-valid")
+            proc = self.run_node(str(VERIFY), tmp)
+        report = f"exit {proc.returncode}\nstdout:\n{proc.stdout[-2000:]}\nstderr:\n{proc.stderr[-2000:]}"
+        lines = proc.stdout.splitlines()
+        fail_line = f"FAIL  {below_one}  [cgt]  (verify error: {BELOW_ONE_MESSAGE})"
+        pass_line = f"PASS  {valid}  [cgt]"
+        self.assertIn(fail_line, lines, report)
+        self.assertIn(pass_line, lines, report)
+        self.assertLess(lines.index(fail_line), lines.index(pass_line), report)
+        self.assertEqual(cli_observed(proc.stdout).get(valid.name), "ACCEPT", report)
+        self.assertEqual(lines[-1:], ["summary: 1 pass, 1 fail (2 fixtures)"], report)
+        self.assertEqual(proc.returncode, 1, report)
 
     def test_cli_runs_through_a_symbolic_link(self) -> None:
         link = Path(self.tmp.name) / "verify-link.mjs"
