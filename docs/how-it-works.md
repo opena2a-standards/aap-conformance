@@ -40,11 +40,16 @@ cgt-compact-expired REJECT EXPIRED: token expired (exp 1780315500 <= clock 17803
 ```
 
 The input carries the fields [Using the fixtures](using-the-fixtures.md)
-lists, plus the token's type in `fixtureType` (`ait`, `cgt`, `da` or `bac`)
-and its form in `tokenForm` (`compact` or `general`); `expected` is not
-read. The result is `{ accepted, category, reason }`, with `category` `null`
-and `reason` empty on ACCEPT. The verifier reads no clock: pass the
+lists, plus the token's type in `fixtureType` (`ait`, `cgt`, `da` or `bac`),
+its form in `tokenForm` (`compact` or `general`) and, optionally, the number
+of times to present it in `presentations`; `expected` is not read. The
+result is `{ accepted, category, reason }`, with `category` `null` and
+`reason` empty on ACCEPT. The verifier reads no clock: pass the
 verification time as `verifierState.clockNumericDate`, since without an
-integer clock it does not judge expiry. `verifyFixture` starts a new jti
-cache on each call; to detect a jti replayed across calls (AAP-SPEC §8.1),
-keep one `Map` and pass it as `verifyPresentation(input, jtiCache)`.
+integer clock it does not judge expiry. `verifyFixture` presents the token
+`presentations` times (once when the field is absent or not an integer)
+against a new jti cache and returns the last result; an integer below 1
+throws a `RangeError` (`presentations must be at least 1`) instead of
+returning a result. To detect a jti replayed across calls (AAP-SPEC §8.1),
+keep one `Map` and pass it as `verifyPresentation(input, jtiCache)`, which
+presents the token once and does not read `presentations`.

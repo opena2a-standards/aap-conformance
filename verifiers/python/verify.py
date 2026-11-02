@@ -917,11 +917,14 @@ class Result:
 def verify_fixture(fixture: dict) -> Result:
     # §8.1 replay prevention: one jti cache per verifier lifetime. A fixture may
     # present its token `presentations` times (default 1); the expected verdict
-    # pins the final presentation.
+    # pins the final presentation. An integer below 1 asks for no presentation,
+    # which leaves no result to return, so it is raised.
     jti_cache: dict[str, int] = {}
     presentations = fixture.get("presentations")
     if not _is_int(presentations):
         presentations = 1
+    if presentations < 1:
+        raise ValueError("presentations must be at least 1")
     result: Result | None = None
     for _ in range(presentations):
         result = verify_presentation(fixture, jti_cache)
@@ -1024,7 +1027,12 @@ def main(argv: list[str]) -> int:
             total_fail += 1
             continue
 
-        got = verify_fixture(fixture)
+        try:
+            got = verify_fixture(fixture)
+        except Exception as exc:
+            print(f"FAIL  {p}  [{fixture.get('fixtureType', '?')}]  (verify error: {exc})")
+            total_fail += 1
+            continue
         expected = fixture.get("expected", {})
         want_accept = expected.get("verifyResult", "").upper() == "ACCEPT"
 

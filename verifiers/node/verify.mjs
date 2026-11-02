@@ -72,10 +72,12 @@
 // (null and "" on accept); any other error is thrown. This file reads no clock:
 // verifierState.clockNumericDate is the verification time, and without an
 // integer clock expiry is not judged. verifyFixture presents the token
-// `presentations` times (default 1) against a new jti cache and returns the
-// last result; verifyPresentation presents it once against the Map the caller
-// passes, so a caller that keeps one Map across calls detects a jti replayed
-// across them (§8.1).
+// `presentations` times (default 1, also used for a value that is not an
+// integer) against a new jti cache and returns the last result; it throws a
+// RangeError ("presentations must be at least 1") when `presentations` is an
+// integer below 1, since that asks for no presentation. verifyPresentation
+// presents it once against the Map the caller passes, so a caller that keeps
+// one Map across calls detects a jti replayed across them (§8.1).
 
 import { readFileSync, readdirSync, statSync, existsSync, realpathSync } from "node:fs";
 import { join } from "node:path";
@@ -973,13 +975,16 @@ function verifyGeneralStructure(tokenGeneral, keys, requiredSuites = []) {
 
 /** Verify a fixture-shaped input: present its token `presentations` times
  *  (default 1) against a new jti cache and return the last result,
- *  { accepted, category, reason }. */
+ *  { accepted, category, reason }. Throws a RangeError when `presentations`
+ *  is an integer below 1. */
 export function verifyFixture(fixture) {
   // §8.1 replay prevention: one jti cache per verifier lifetime. A fixture may
   // present its token `presentations` times (default 1); the expected verdict
-  // pins the final presentation.
+  // pins the final presentation. An integer below 1 asks for no presentation,
+  // which leaves no result to return, so it is thrown.
   const jtiCache = new Map();
   const presentations = Number.isInteger(fixture.presentations) ? fixture.presentations : 1;
+  if (presentations < 1) throw new RangeError("presentations must be at least 1");
   let result = null;
   for (let n = 0; n < presentations; n++) {
     result = verifyPresentation(fixture, jtiCache);
@@ -1106,7 +1111,14 @@ function main(argv) {
       continue;
     }
 
-    const got = verifyFixture(fixture);
+    let got;
+    try {
+      got = verifyFixture(fixture);
+    } catch (err) {
+      console.log(`FAIL  ${p}  [${fixture.fixtureType ?? "?"}]  (verify error: ${err.message})`);
+      totalFail++;
+      continue;
+    }
     const expected = fixture.expected ?? {};
     const wantAccept = (expected.verifyResult ?? "").toUpperCase() === "ACCEPT";
 
