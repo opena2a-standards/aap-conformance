@@ -57,9 +57,29 @@
 // Usage:  node verify.mjs <fixture.json | directory> [...]
 // Exit code: 0 if every fixture's expected verdict (and reject category,
 // when pinned) is met, else 1.
+//
+// Module use: the CLI is a wrapper that runs when this file is the entry
+// point; importing the file from another script does not start it. The file
+// exports the verification the CLI performs for each fixture:
+//
+//   import { verifyFixture, verifyPresentation } from "./verify.mjs";
+//   verifyFixture(input);                  // { accepted, category, reason }
+//   verifyPresentation(input, jtiCache);   // { accepted, category, reason }
+//
+// `input` holds a fixture's verification fields (fixtureType, tokenForm, token
+// or tokenGeneral, verifierState, delegation, presentation, presentations);
+// `expected` is not read. A rejection is returned with its category and reason
+// (null and "" on accept); any other error is thrown. This file reads no clock:
+// verifierState.clockNumericDate is the verification time, and without an
+// integer clock expiry is not judged. verifyFixture presents the token
+// `presentations` times (default 1) against a new jti cache and returns the
+// last result; verifyPresentation presents it once against the Map the caller
+// passes, so a caller that keeps one Map across calls detects a jti replayed
+// across them (§8.1).
 
-import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
+import { readFileSync, readdirSync, statSync, existsSync, realpathSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createHash, createPublicKey, verify as cryptoVerify } from "node:crypto";
 import { ml_dsa65 } from "@noble/post-quantum/ml-dsa.js";
 
@@ -951,7 +971,10 @@ function verifyGeneralStructure(tokenGeneral, keys, requiredSuites = []) {
   return { claims };
 }
 
-function verifyFixture(fixture) {
+/** Verify a fixture-shaped input: present its token `presentations` times
+ *  (default 1) against a new jti cache and return the last result,
+ *  { accepted, category, reason }. */
+export function verifyFixture(fixture) {
   // §8.1 replay prevention: one jti cache per verifier lifetime. A fixture may
   // present its token `presentations` times (default 1); the expected verdict
   // pins the final presentation.
@@ -964,7 +987,10 @@ function verifyFixture(fixture) {
   return result;
 }
 
-function verifyPresentation(fixture, jtiCache) {
+/** Present a fixture-shaped input's token once against `jtiCache`, a Map the
+ *  caller keeps for the verifier's lifetime (§8.1), and return
+ *  { accepted, category, reason }. */
+export function verifyPresentation(fixture, jtiCache) {
   const keys = buildKeySet(fixture.verifierState ?? {});
   const clock = fixture.verifierState?.clockNumericDate;
   const fixtureType = fixture.fixtureType;
@@ -1109,4 +1135,16 @@ function main(argv) {
   return totalFail === 0 ? 0 : 1;
 }
 
-process.exit(main(process.argv.slice(2)));
+// The CLI runs when process.argv[1], the script Node was started with,
+// resolves to this file (directly or through a symbolic link). Importing this
+// file from another script does not start it.
+function isEntryPoint() {
+  if (typeof process.argv[1] !== "string") return false;
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (isEntryPoint()) process.exit(main(process.argv.slice(2)));

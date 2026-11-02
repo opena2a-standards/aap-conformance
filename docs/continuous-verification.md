@@ -58,7 +58,11 @@ rule and the error reporting of `scripts/conformance_profile.py`, the
 README's run commands, passing-run capture and spec-version pointer
 (`scripts/test_readme_run_capture.py`), the spec sections the scope page's
 DA expiry row cites and the one it marks pending a spec release
-(`scripts/test_scope_doc.py`), and this page's account of how they run.
+(`scripts/test_scope_doc.py`), the Node verifier's module exports, their
+agreement with its CLI on every fixture and the CLI's start through a
+symbolic link (`scripts/test_node_verifier_module.py`, skipped without
+`node` on `PATH` or without `npm install`), and this page's account of how
+they run.
 Gate 6 checks the capture's summary line in CI as well; the README's run
 commands, the capture's first entry and the spec-version pointer are
 checked only by these tests.
