@@ -74,7 +74,8 @@ conforming verifier must match.
 - [Continuous verification](docs/continuous-verification.md): the CI gates
   that enforce these claims on pushes to `main` and on pull requests.
 - [How it works](docs/how-it-works.md): why the reference verifiers are a
-  Node and Python pair.
+  Node and Python pair, and how a program calls the Node verifier
+  in-process.
 - [`conformance.json`](./conformance.json): the machine-readable
   requirement-to-fixture mapping.
 - [`COSIGNERS.md`](./COSIGNERS.md): how second parties cosign
